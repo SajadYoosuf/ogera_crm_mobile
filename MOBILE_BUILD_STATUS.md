@@ -34,7 +34,7 @@
 ## 2. Foundation layer
 
 ### `lib/core/config/app_config.dart` (24 lines)
-Build-time configuration. `API_BASE_URL` comes from `--dart-define` and falls back to `http://10.0.2.2:3000` for the Android emulator. Also holds the OSM tile URL, the Nominatim base URL and User-Agent, and the 20-second live-refresh interval.
+Build-time configuration. `API_BASE_URL` comes from `--dart-define`. Without it, release builds use the public `https://ogera-crm.vercel.app` deployment and debug builds use the local dev server (`_debugUrl` in `app_config.dart`). Local emulator/device builds can override it with `--dart-define=API_BASE_URL=...`. Also holds the OSM tile URL, the Nominatim base URL and User-Agent, and the 20-second live-refresh interval.
 
 ### `lib/theme/ogera_colors.dart` (56 lines)
 The identity palette carried over from web — `ink #0B2942`, `blue #126BB0`, `canvas #F1F5F7`, `line #D6E0E6`, `muted #667A8C` — plus semantic colours (`success`, `warning`, `danger`, `info`), soft variants, two shadow presets, and `OgeraSpacing` (screen padding 16, gap 12, card radius 16, chip radius 8, field radius 12, **touch target 44**).

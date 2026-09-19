@@ -48,17 +48,24 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
+      _baseUrlOverride = baseUrl {
+    _log(
+      'server = $baseUrl '
+      '(${kReleaseMode ? 'release' : kProfileMode ? 'profile' : 'debug'} build)',
+    );
+  }
 
   final http.Client _client;
-  final String _baseUrl;
+  final String? _baseUrlOverride;
 
   String? _accessToken;
   VoidCallback? onUnauthorized;
 
   static const _timeout = Duration(seconds: 20);
 
-  String get baseUrl => _baseUrl;
+  // Read on every request rather than frozen at startup, so a hot reload picks
+  // up a changed AppConfig address.
+  String get baseUrl => _baseUrlOverride ?? AppConfig.apiBaseUrl;
   bool get hasToken => _accessToken != null && _accessToken!.isNotEmpty;
 
   void setAccessToken(String? token) => _accessToken = token;
@@ -102,24 +109,50 @@ class ApiClient {
     final request = http.Request(method, uri)..headers.addAll(headers);
     if (body != null) request.body = jsonEncode(body);
 
+    // The bearer token is never logged, only where the request went and how it
+    // ended.
+    _log('--> $method $uri${hasToken ? '  (authorised)' : '  (no token)'}');
+    final clock = Stopwatch()..start();
+
     http.Response response;
     try {
       final streamed = await _client.send(request).timeout(_timeout);
       response = await http.Response.fromStream(streamed);
     } on TimeoutException {
+      _log('<-- $method $uri  TIMEOUT after ${clock.elapsedMilliseconds} ms');
       throw const ApiException('The server took too long to respond.');
-    } catch (_) {
+    } catch (error) {
+      // The user sees one friendly message; the log keeps the real reason
+      // (unreachable host, refused connection, cleartext blocked, DNS...).
+      _log(
+        '<-- $method $uri  NETWORK ERROR after ${clock.elapsedMilliseconds} ms'
+        ' | ${error.runtimeType}: $error',
+      );
       throw const ApiException(
         'Network problem. Check your connection and try again.',
       );
     }
 
-    _log('$method ${uri.path} -> ${response.statusCode}');
+    _log(
+      '<-- $method ${uri.path} ${response.statusCode}'
+      '  ${clock.elapsedMilliseconds} ms, ${response.bodyBytes.length} bytes',
+    );
+    if (response.statusCode >= 400) {
+      // Error bodies carry the server's code and message, never user data. An
+      // HTML page (a route that does not exist, a proxy error) is cut short.
+      final text = response.body.trim();
+      final looksLikeHtml = text.startsWith('<');
+      _log(
+        looksLikeHtml
+            ? '    not a JSON API reply (an HTML page). Is this the right server?'
+            : '    error body: ${text.length > 300 ? '${text.substring(0, 300)}…' : text}',
+      );
+    }
     return _unwrap(response);
   }
 
   Uri _resolve(String path, Map<String, dynamic>? query) {
-    final base = Uri.tryParse(_baseUrl);
+    final base = Uri.tryParse(baseUrl);
     if (base == null || !base.hasScheme || base.host.isEmpty) {
       throw const ApiException(
         'The CRM server address is not configured for this build.',

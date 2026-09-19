@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +15,7 @@ class Launchers {
     String? countryCode,
   }) async {
     final number = normalisePhone(phone, countryCode: countryCode);
+    _log('call', phone, countryCode, number);
     await _open(
       context,
       Uri(scheme: 'tel', path: number),
@@ -27,14 +29,14 @@ class Launchers {
     String? countryCode,
     String? message,
   }) async {
-    final number = normaliseWhatsAppPhone(phone, countryCode: countryCode);
-    if (number == null) {
-      _toast(context, 'Save a valid phone number with its country code first.');
-      return;
-    }
+    final number = normalisePhone(
+      phone,
+      countryCode: countryCode,
+    ).replaceAll('+', '');
     final uri = Uri.https('wa.me', '/$number', {
       if (message != null && message.isNotEmpty) 'text': message,
     });
+    _log('whatsapp', phone, countryCode, number);
     await _open(
       context,
       uri,
@@ -79,15 +81,35 @@ class Launchers {
     required String failure,
   }) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    if (kDebugMode) debugPrint('[Ogera Launch] opening $uri');
     try {
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
+      if (kDebugMode) debugPrint('[Ogera Launch] launched=$launched');
       if (!launched) _show(messenger, failure);
-    } catch (_) {
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[Ogera Launch] failed | ${error.runtimeType}: $error');
+      }
       _show(messenger, failure);
     }
+  }
+
+  /// Shows exactly how a number was assembled, so a wrong country code is
+  /// visible at a glance: what is stored, what code came with it, what is dialled.
+  static void _log(
+    String action,
+    String stored,
+    String? countryCode,
+    String dialled,
+  ) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[Ogera Launch] $action | stored phone="$stored" '
+      'countryCode="${countryCode ?? '(none)'}" -> number=$dialled',
+    );
   }
 
   static void _toast(BuildContext context, String message) {
