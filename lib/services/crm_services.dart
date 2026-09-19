@@ -1,6 +1,7 @@
 import '../core/network/api_client.dart';
 import '../models/contact.dart';
 import '../models/followup.dart';
+import '../models/performance.dart';
 import '../models/professional.dart';
 import '../models/sale.dart';
 
@@ -18,6 +19,7 @@ class ContactsService {
     String? source,
     String? startDate,
     String? endDate,
+    String? addedBy,
     int page = 1,
     int limit = 20,
   }) async {
@@ -29,6 +31,7 @@ class ContactsService {
         'source': source,
         'startDate': startDate,
         'endDate': endDate,
+        'addedBy': addedBy,
         'page': page,
         'limit': limit,
       },
@@ -253,6 +256,24 @@ class SalesService {
   Future<List<Sale>> search(String query) async {
     final data = await _api.get('/api/sales/search', query: {'query': query});
     return asList(data).map(Sale.fromJson).toList(growable: false);
+  }
+}
+
+class PerformanceService {
+  const PerformanceService(this._api);
+
+  final ApiClient _api;
+
+  /// Heads get the whole team; the server narrows a staff session to itself.
+  Future<PerformanceReport> fetch({
+    required String startDate,
+    required String endDate,
+  }) async {
+    final data = await _api.get(
+      '/api/performance',
+      query: {'startDate': startDate, 'endDate': endDate},
+    );
+    return PerformanceReport.fromJson(data);
   }
 }
 

@@ -54,6 +54,9 @@ class OgeraCrmApp extends StatelessWidget {
         ProxyProvider<ApiClient, SalesService>(
           update: (_, api, _) => SalesService(api),
         ),
+        ProxyProvider<ApiClient, PerformanceService>(
+          update: (_, api, _) => PerformanceService(api),
+        ),
         ProxyProvider<ApiClient, StaffDirectoryService>(
           update: (_, api, _) => StaffDirectoryService(api),
         ),

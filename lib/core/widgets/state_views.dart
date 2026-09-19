@@ -222,6 +222,55 @@ class ErrorStateView extends StatelessWidget {
   }
 }
 
+/// A failure that should not take the screen over: the data already on screen
+/// stays visible and the banner offers a retry. Used when a refresh or a later
+/// page fails after the first load succeeded.
+class InlineErrorBanner extends StatelessWidget {
+  const InlineErrorBanner({
+    super.key,
+    required this.message,
+    required this.onRetry,
+    this.kind = FailureKind.server,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final FailureKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final offline = kind == FailureKind.offline;
+    final tint = offline ? OgeraColors.warning : OgeraColors.danger;
+    final wash = offline ? OgeraColors.warningSoft : OgeraColors.dangerSoft;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: wash,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tint.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            offline ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+            size: 20,
+            color: tint,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              offline ? "You're offline. Showing the last loaded data." : message,
+              style: const TextStyle(fontSize: 12.5, height: 1.35),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
 /// Fills the remaining viewport so an empty or error state is vertically
 /// centred inside a `RefreshIndicator`, which needs a scrollable child.
 class RefreshableMessage extends StatelessWidget {

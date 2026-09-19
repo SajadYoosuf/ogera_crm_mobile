@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/session_view_model.dart';
+import '../performance/performance_screen.dart';
 import '../sales/sales_screen.dart';
 import 'my_route_screen.dart';
 import 'profile_screen.dart';
@@ -58,6 +59,16 @@ class MoreTab extends StatelessWidget {
                       pushShellRoute<void>(context, (_) => const SalesScreen()),
                 ),
                 _MenuItem(
+                  icon: Icons.insights_rounded,
+                  color: OgeraColors.warning,
+                  label: 'Performance',
+                  caption: 'Leads and awareness added by each staff member',
+                  onTap: () => pushShellRoute<void>(
+                    context,
+                    (_) => const PerformanceScreen(),
+                  ),
+                ),
+                _MenuItem(
                   icon: Icons.badge_outlined,
                   color: OgeraColors.blue,
                   label: 'Staff directory',
@@ -86,6 +97,15 @@ class MoreTab extends StatelessWidget {
                   caption: 'The path and distance recorded for you',
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const MyRouteScreen()),
+                  ),
+                ),
+                _MenuItem(
+                  icon: Icons.insights_rounded,
+                  color: OgeraColors.blue,
+                  label: 'My performance',
+                  caption: 'Leads and awareness you have added',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PerformanceScreen()),
                   ),
                 ),
               ],
