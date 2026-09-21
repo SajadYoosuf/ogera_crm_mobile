@@ -68,14 +68,50 @@ class _ShimmerBoxState extends State<ShimmerBox>
           width: widget.width,
           decoration: BoxDecoration(
             color: Color.lerp(
-              const Color(0xFFE9EFF3),
-              const Color(0xFFF6F9FB),
+              OgeraColors.blue.withValues(alpha: 0.08),
+              OgeraColors.blue.withValues(alpha: 0.15),
               _controller.value,
             ),
             borderRadius: BorderRadius.circular(widget.radius),
           ),
         );
       },
+    );
+  }
+}
+
+/// Centred spinner with a short label, for screens whose content is one
+/// unit (a report, a filtered list) rather than a stack of repeating rows.
+class LoadingStateView extends StatelessWidget {
+  const LoadingStateView({super.key, this.message = 'Loading…'});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: OgeraColors.blue,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: OgeraColors.muted,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
