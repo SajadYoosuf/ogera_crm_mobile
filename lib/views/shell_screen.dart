@@ -279,9 +279,9 @@ class _QuickActionFabState extends State<QuickActionFab>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _action(
           label: 'Add contact',
@@ -302,6 +302,7 @@ class _QuickActionFabState extends State<QuickActionFab>
             order: 1,
             onTap: () => _run(() => openSaleForm(context)),
           ),
+        const SizedBox(width: 8),
         FloatingActionButton(
           onPressed: _toggle,
           backgroundColor: OgeraColors.blue,
@@ -332,47 +333,50 @@ class _QuickActionFabState extends State<QuickActionFab>
     );
     return SizeTransition(
       sizeFactor: animation,
-      axisAlignment: 1,
+      axisAlignment: 0,
       child: FadeTransition(
         opacity: _controller,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
+          padding: const EdgeInsets.only(right: 6),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
+                  horizontal: 8,
+                  vertical: 4,
                 ),
                 decoration: BoxDecoration(
                   color: OgeraColors.ink,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   label,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(height: 4),
               SizedBox(
-                width: 46,
-                height: 46,
+                width: 40,
+                height: 40,
                 child: Material(
                   color: OgeraColors.surface,
                   elevation: 2,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(12),
                     side: const BorderSide(color: OgeraColors.line),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: onTap,
-                    child: Icon(icon, size: 21, color: OgeraColors.blue),
+                    child: Icon(icon, size: 18, color: OgeraColors.blue),
                   ),
                 ),
               ),
