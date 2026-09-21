@@ -408,15 +408,6 @@ class _LoginForm extends StatelessWidget {
               onChanged: viewModel.updatePassword,
               onFieldSubmitted: (_) => onSubmit(),
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: viewModel.isSubmitting
-                    ? null
-                    : viewModel.requestPasswordHelp,
-                child: const Text('Forgot password?'),
-              ),
-            ),
             if (viewModel.message != null) ...[
               const SizedBox(height: 4),
               _Message(
