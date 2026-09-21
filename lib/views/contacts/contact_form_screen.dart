@@ -55,20 +55,8 @@ class _ContactFormViewState extends State<_ContactFormView> {
   late final _addressController = TextEditingController(
     text: _viewModel.draft.address,
   );
-  late final _wardController = TextEditingController(
-    text: _viewModel.draft.ward,
-  );
   late final _remarksController = TextEditingController(
     text: _viewModel.draft.remarks,
-  );
-  late final _tankSizeController = TextEditingController(
-    text: _viewModel.draft.tankSizeInterest,
-  );
-  late final _currentTankController = TextEditingController(
-    text: _viewModel.draft.currentTank,
-  );
-  late final _waterSourceController = TextEditingController(
-    text: _viewModel.draft.waterSource,
   );
 
   ReferralChoice? _referral;
@@ -96,11 +84,7 @@ class _ContactFormViewState extends State<_ContactFormView> {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _wardController.dispose();
     _remarksController.dispose();
-    _tankSizeController.dispose();
-    _currentTankController.dispose();
-    _waterSourceController.dispose();
     super.dispose();
   }
 
@@ -112,11 +96,7 @@ class _ContactFormViewState extends State<_ContactFormView> {
       ..name = _nameController.text
       ..phone = _phoneController.text
       ..address = _addressController.text
-      ..ward = _wardController.text
-      ..remarks = _remarksController.text
-      ..tankSizeInterest = _tankSizeController.text
-      ..currentTank = _currentTankController.text
-      ..waterSource = _waterSourceController.text;
+      ..remarks = _remarksController.text;
 
     final saved = await _viewModel.save();
     if (!mounted) return;
@@ -257,96 +237,6 @@ class _ContactFormViewState extends State<_ContactFormView> {
               maxLines: 2,
               maxLength: 1000,
             ),
-            OgeraPickerField(
-              label: 'District',
-              icon: Icons.map_outlined,
-              value: draft.district,
-              onClear: () => setState(() => draft.district = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'District',
-                  options: CrmOptions.districts,
-                  labelOf: (value) => value,
-                  selected: draft.district,
-                );
-                if (picked != null) setState(() => draft.district = picked);
-              },
-            ),
-            OgeraPickerField(
-              label: 'Panchayath',
-              icon: Icons.location_city_outlined,
-              value: draft.panchayath,
-              onClear: () => setState(() => draft.panchayath = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Panchayath',
-                  options: CrmOptions.panchayaths,
-                  labelOf: (value) => value,
-                  selected: draft.panchayath,
-                  searchHint: 'Search panchayath',
-                );
-                if (picked != null) setState(() => draft.panchayath = picked);
-              },
-            ),
-            OgeraTextField(
-              label: 'Ward',
-              controller: _wardController,
-              icon: Icons.numbers_rounded,
-              maxLength: 50,
-            ),
-
-            const SectionHeader(
-              title: 'Site details',
-              icon: Icons.water_drop_outlined,
-            ),
-            _HouseStageField(
-              value: draft.houseStage,
-              onChanged: (value) => setState(() => draft.houseStage = value),
-            ),
-            OgeraTextField(
-              label: 'Current tank type',
-              controller: _currentTankController,
-              icon: Icons.storage_rounded,
-              hint: 'e.g. Concrete, PVC',
-              maxLength: 255,
-            ),
-            OgeraTextField(
-              label: 'Water source',
-              controller: _waterSourceController,
-              icon: Icons.water_rounded,
-              hint: 'e.g. Borewell, Well',
-              maxLength: 255,
-            ),
-            OgeraTextField(
-              label: 'Tank size interest (Ltr)',
-              controller: _tankSizeController,
-              icon: Icons.straighten_rounded,
-              keyboardType: TextInputType.number,
-              hint: 'e.g. 1000',
-              maxLength: 255,
-            ),
-            if (draft.contactType == ContactType.awareness)
-              OgeraPickerField(
-                label: 'Awareness level',
-                icon: Icons.psychology_outlined,
-                value: draft.awarenessLevel,
-                onClear: () => setState(() => draft.awarenessLevel = null),
-                onTap: () async {
-                  final picked = await showOptionPicker<String>(
-                    context,
-                    title: 'Awareness level',
-                    options: CrmOptions.awarenessLevels,
-                    labelOf: (value) => value,
-                    selected: draft.awarenessLevel,
-                    searchable: false,
-                  );
-                  if (picked != null) {
-                    setState(() => draft.awarenessLevel = picked);
-                  }
-                },
-              ),
 
             const SectionHeader(title: 'Referral', icon: Icons.share_outlined),
             _ReferralField(
@@ -403,65 +293,6 @@ class _ContactFormViewState extends State<_ContactFormView> {
       return 'Sale #${draft.referredBySaleId}';
     }
     return null;
-  }
-}
-
-/// House stage carries a construction phase when the house is under
-/// construction, matching how the column is written on web.
-class _HouseStageField extends StatelessWidget {
-  const _HouseStageField({required this.value, required this.onChanged});
-
-  final String? value;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final base = CrmOptions.baseOfHouseStage(value);
-    return Column(
-      children: [
-        OgeraPickerField(
-          label: 'House stage',
-          icon: Icons.house_outlined,
-          value: base.isEmpty ? null : base,
-          placeholder: 'Not recorded',
-          onClear: () => onChanged(null),
-          onTap: () async {
-            final picked = await showOptionPicker<String>(
-              context,
-              title: 'House stage',
-              options: CrmOptions.houseStageBases,
-              labelOf: (option) => option,
-              selected: base.isEmpty ? null : base,
-              searchable: false,
-            );
-            if (picked != null) {
-              onChanged(CrmOptions.composeHouseStage(picked, null));
-            }
-          },
-        ),
-        if (base == 'Under Construction')
-          OgeraPickerField(
-            label: 'Construction phase',
-            icon: Icons.construction_rounded,
-            value: CrmOptions.phaseOfHouseStage(value),
-            onTap: () async {
-              final picked = await showOptionPicker<String>(
-                context,
-                title: 'Construction phase',
-                options: CrmOptions.constructionPhases,
-                labelOf: (option) => option,
-                selected: CrmOptions.phaseOfHouseStage(value),
-                searchable: false,
-              );
-              if (picked != null) {
-                onChanged(
-                  CrmOptions.composeHouseStage('Under Construction', picked),
-                );
-              }
-            },
-          ),
-      ],
-    );
   }
 }
 
