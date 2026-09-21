@@ -196,7 +196,7 @@ class ContactFormViewModel extends ChangeNotifier {
   ContactFormViewModel(this._service, {Contact? existing})
     : _existing = existing,
       draft = existing == null
-          ? ContactDraft(phone: '')
+          ? ContactDraft(phone: '', source: 'offline')
           : ContactDraft.fromContact(existing);
 
   final ContactsService _service;
