@@ -244,11 +244,17 @@ class LocationTrackingService {
     final state = await checkPermission();
     if (!state.canTrack) return;
 
+    // Android keeps location (and uploads) flowing in the background via a
+    // foreground service under "While using the app" permission alone — the
+    // persistent notification below is what makes that legal, no "Always"
+    // grant required. iOS has no such exception: allowBackgroundLocationUpdates
+    // only works, and is only set, once "Always" was actually granted.
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    final background = isAndroid || state == LocationPermissionState.granted;
+
     _positions =
         Geolocator.getPositionStream(
-          locationSettings: _settings(
-            background: state == LocationPermissionState.granted,
-          ),
+          locationSettings: _settings(background: background),
         ).listen(
           _onPosition,
           onError: (Object error) => _log('position stream error: $error'),
@@ -270,9 +276,7 @@ class LocationTrackingService {
 
     unawaited(_tick());
     await _refreshPendingCount();
-    _log(
-      'tracking started (background: ${state == LocationPermissionState.granted})',
-    );
+    _log('tracking started (background: $background)');
   }
 
   /// Stops immediately on logout, a revoked session, or an inactive account,
