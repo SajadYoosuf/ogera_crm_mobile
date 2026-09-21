@@ -114,9 +114,7 @@ class _ShellScreenState extends State<ShellScreen> {
             const MoreTab(),
           ],
           ),
-          floatingActionButton: _showsQuickAction
-              ? QuickActionFab(user: user)
-              : null,
+          floatingActionButton: _buildFab(context),
           floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
           bottomNavigationBar: _NavBar(
             index: _index,
@@ -127,9 +125,23 @@ class _ShellScreenState extends State<ShellScreen> {
     );
   }
 
-  /// The quick action belongs on the tabs where creating a record is the
-  /// natural next step; the map and More would only obscure content.
-  bool get _showsQuickAction => _index == 0 || _index == 1 || _index == 2;
+  /// Build context-specific FAB for each tab
+  Widget? _buildFab(BuildContext context) {
+    return switch (_index) {
+      1 => _DirectActionFab(
+        icon: Icons.person_add_alt_1_rounded,
+        tooltip: 'Add contact',
+        onPressed: () => openContactForm(context),
+      ),
+      2 => _DirectActionFab(
+        icon: Icons.handyman_rounded,
+        tooltip: 'Add professional',
+        onPressed: () => openProfessionalForm(context),
+      ),
+      0 => QuickActionFab(user: context.read<SessionViewModel>().user!),
+      _ => null,
+    };
+  }
 }
 
 /// IndexedStack builds every tab up front, but network work should begin only
@@ -368,6 +380,34 @@ class _QuickActionFabState extends State<QuickActionFab>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Simple FAB that directly opens a form without nested menu
+class _DirectActionFab extends StatelessWidget {
+  const _DirectActionFab({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      backgroundColor: OgeraColors.blue,
+      foregroundColor: Colors.white,
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Icon(icon, size: 27),
     );
   }
 }
