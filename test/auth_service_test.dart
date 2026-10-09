@@ -7,73 +7,119 @@ import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/auth_service.dart';
 
-void main() {
-  test(
-    'posts credentials with the mobile client scope and stores the session',
-    () async {
-      final store = _MemorySessionStore();
-      final client = MockClient((request) async {
-        expect(request.method, 'POST');
-        expect(request.url, Uri.parse('https://crm.example/api/auth/login'));
-        expect(request.headers['x-client-type'], 'mobile');
-        expect(request.headers['x-client-scope'], 'staff');
-        expect(jsonDecode(request.body), {
-          'email': 'sam@ogera.com',
-          'password': 'password',
-        });
-        return http.Response(
-          jsonEncode({
-            'success': true,
-            'accessToken': 'crm-token',
-            'user': {
-              'id': 12,
-              'email': 'sam@ogera.com',
-              'name': 'Sam Ogera',
-              'phone': '+919876543210',
-              'role': 'sales_staff',
-            },
-          }),
-          200,
-        );
-      });
-      final api = ApiClient(client: client, baseUrl: 'https://crm.example');
-      final service = AuthService(api, store);
+Map<String, dynamic> _loginReply({
+  required int id,
+  required String role,
+  String name = 'Sam Ogera',
+  String email = 'sam@ogera.com',
+}) => {
+  'access_token': 'crm-token',
+  'token_type': 'bearer',
+  'employee': {
+    'id': id,
+    'name': name,
+    'email': email,
+    'role': role,
+    'phone': '+919876543210',
+    'is_active': true,
+  },
+};
 
+AuthService _serviceReplying(
+  http.Response Function(http.Request request) reply, {
+  _MemorySessionStore? store,
+  ApiClient? api,
+}) {
+  final client = MockClient((request) async => reply(request));
+  return AuthService(
+    api ?? ApiClient(client: client, baseUrl: 'https://crm.example'),
+    store ?? _MemorySessionStore(),
+  );
+}
+
+void main() {
+  test('posts credentials to /auth/login and stores the session', () async {
+    final store = _MemorySessionStore();
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url, Uri.parse('https://crm.example/auth/login'));
+      expect(request.headers['x-client-type'], 'mobile');
+      expect(jsonDecode(request.body), {
+        'email': 'sam@ogera.com',
+        'password': 'password',
+      });
+      return http.Response(
+        jsonEncode(_loginReply(id: 12, role: 'sales_executive')),
+        200,
+      );
+    });
+    final api = ApiClient(client: client, baseUrl: 'https://crm.example');
+    final service = AuthService(api, store);
+
+    final session = await service.signIn(
+      email: 'sam@ogera.com',
+      password: 'password',
+      scope: LoginScope.staff,
+    );
+
+    expect(session.user.name, 'Sam Ogera');
+    expect(session.user.id, 12);
+    expect(session.user.role, UserRole.salesStaff);
+    expect(store.saved?.accessToken, 'crm-token');
+    // Subsequent calls must carry the token and know who is signed in.
+    expect(api.hasToken, isTrue);
+    expect(api.currentUserId, 12);
+  });
+
+  test('every non-head employee role signs in as staff', () async {
+    for (final role in [
+      'sales_executive',
+      'team_lead',
+      'tele_caller',
+      'field_executive',
+      'support',
+      'accounts_executive', // a custom role created in the web app
+    ]) {
+      final service = _serviceReplying(
+        (_) => http.Response(jsonEncode(_loginReply(id: 1, role: role)), 200),
+      );
       final session = await service.signIn(
-        email: 'sam@ogera.com',
-        password: 'password',
+        email: 'a@b.com',
+        password: 'x',
         scope: LoginScope.staff,
       );
+      expect(session.user.role, UserRole.salesStaff, reason: role);
+      expect(session.user.isStaff, isTrue);
+    }
+  });
 
-      expect(session.user.name, 'Sam Ogera');
-      expect(session.user.role, UserRole.salesStaff);
-      expect(store.saved?.accessToken, 'crm-token');
-      // Subsequent calls must carry the token without the caller passing it.
-      expect(api.hasToken, isTrue);
-    },
-  );
+  test('admin and manager are the Head audience', () async {
+    for (final entry in {
+      'admin': UserRole.admin,
+      'manager': UserRole.salesHead,
+    }.entries) {
+      final service = _serviceReplying(
+        (_) =>
+            http.Response(jsonEncode(_loginReply(id: 2, role: entry.key)), 200),
+      );
+      final session = await service.signIn(
+        email: 'a@b.com',
+        password: 'x',
+        scope: LoginScope.head,
+      );
+      expect(session.user.role, entry.value);
+      expect(session.user.isHead, isTrue);
+    }
+  });
 
   test('refuses a head account signing in on the staff tab', () async {
     final store = _MemorySessionStore();
-    final client = MockClient(
-      (_) async => http.Response(
-        jsonEncode({
-          'success': true,
-          'accessToken': 'crm-token',
-          'user': {
-            'id': 3,
-            'email': 'lead@ogera.com',
-            'name': 'Sales Head',
-            'phone': null,
-            'role': 'sales_head',
-          },
-        }),
+    final service = _serviceReplying(
+      (_) => http.Response(
+        jsonEncode(_loginReply(id: 3, role: 'manager', name: 'Mani')),
         200,
       ),
-    );
-    final service = AuthService(
-      ApiClient(client: client, baseUrl: 'https://crm.example'),
-      store,
+      store: store,
     );
 
     await expectLater(
@@ -94,24 +140,31 @@ void main() {
     expect(store.saved, isNull);
   });
 
-  test('maps CRM credential errors to an AuthException', () async {
-    final service = AuthService(
-      ApiClient(
-        baseUrl: 'https://crm.example',
-        client: MockClient(
-          (_) async => http.Response(
-            jsonEncode({
-              'success': false,
-              'error': {
-                'code': 'INVALID_CREDENTIALS',
-                'message': 'Invalid email, password, or access',
-              },
-            }),
-            401,
-          ),
+  test('refuses a staff account signing in on the head tab', () async {
+    final service = _serviceReplying(
+      (_) => http.Response(
+        jsonEncode(_loginReply(id: 4, role: 'tele_caller')),
+        200,
+      ),
+    );
+    await expectLater(
+      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.head),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.code,
+          'code',
+          'SCOPE_MISMATCH',
         ),
       ),
-      _MemorySessionStore(),
+    );
+  });
+
+  test('shows the server message when the credentials are wrong', () async {
+    final service = _serviceReplying(
+      (_) => http.Response(
+        jsonEncode({'detail': 'Invalid email or password'}),
+        401,
+      ),
     );
 
     await expectLater(
@@ -124,9 +177,43 @@ void main() {
         isA<AuthException>().having(
           (error) => error.message,
           'message',
-          'Invalid email, password, or access',
+          'Invalid email or password',
         ),
       ),
+    );
+  });
+
+  test('shows the server message for a deactivated account', () async {
+    final service = _serviceReplying(
+      (_) => http.Response(
+        jsonEncode({'detail': 'Employee account is inactive'}),
+        403,
+      ),
+    );
+    await expectLater(
+      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          'Employee account is inactive',
+        ),
+      ),
+    );
+  });
+
+  test('rejects a reply that carries no token', () async {
+    final service = _serviceReplying(
+      (_) => http.Response(
+        jsonEncode({
+          'employee': {'id': 1},
+        }),
+        200,
+      ),
+    );
+    await expectLater(
+      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff),
+      throwsA(isA<AuthException>()),
     );
   });
 
@@ -149,10 +236,22 @@ void main() {
 
     expect(restored?.user.id, 7);
     expect(api.hasToken, isTrue);
+    expect(api.currentUserId, 7);
 
     await service.signOut();
     expect(store.saved, isNull);
     expect(api.hasToken, isFalse);
+    expect(api.currentUserId, isNull);
+  });
+
+  test('a stored session survives the round trip through JSON', () {
+    final session = AuthSession.fromLogin(
+      _loginReply(id: 9, role: 'manager', name: 'Mani'),
+    )!;
+    final copy = AuthSession.fromJson(session.toJson());
+    expect(copy.accessToken, 'crm-token');
+    expect(copy.user.id, 9);
+    expect(copy.user.role, UserRole.salesHead);
   });
 }
 

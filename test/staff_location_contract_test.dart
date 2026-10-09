@@ -13,7 +13,7 @@ void main() {
         () async {
       final client = MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/api/staff/locations');
+        expect(request.url.path, '/staff/locations');
         expect(request.headers['authorization'], 'Bearer staff-token');
         expect(jsonDecode(request.body), {
           'points': [
@@ -44,7 +44,7 @@ void main() {
         () async {
       final client = MockClient((request) async {
         expect(request.method, 'GET');
-        expect(request.url.path, '/api/staff/locations/live');
+        expect(request.url.path, '/staff/locations/live');
         expect(request.headers['authorization'], anyOf('Bearer head-token', 'Bearer admin-token'));
         return http.Response(jsonEncode({
           'success': true,
@@ -110,7 +110,7 @@ void main() {
         baseUrl: 'https://crm.example',
         client: MockClient(
           (request) async {
-            expect(request.url.path, '/api/staff/locations/history');
+            expect(request.url.path, '/staff/locations/history');
             expect(request.url.queryParameters, {'userId': '7', 'date': '2026-09-10'});
             return http.Response(jsonEncode({
               'success': true,

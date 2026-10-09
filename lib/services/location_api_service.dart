@@ -2,7 +2,7 @@ import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
 import '../models/staff_location.dart';
 
-/// The five staff-location endpoints described in §5.3 of the mobile PRD.
+/// The five staff-location endpoints of the FastAPI backend (`/staff/locations`).
 class LocationApiService {
   const LocationApiService(this._api);
 
@@ -13,7 +13,7 @@ class LocationApiService {
   Future<void> upload(List<PendingPoint> points) {
     if (points.isEmpty) return Future.value();
     return _api.post(
-      '/api/staff/locations',
+      '/staff/locations',
       body: {
         'points': points.map((point) => point.toJson()).toList(growable: false),
       },
@@ -23,11 +23,11 @@ class LocationApiService {
   /// Tells the server the device stopped or resumed sharing, so the head map
   /// can distinguish "location off" from "simply out of coverage".
   Future<void> reportState(String state) {
-    return _api.post('/api/staff/locations/state', body: {'state': state});
+    return _api.post('/staff/locations/state', body: {'state': state});
   }
 
   Future<List<StaffLocation>> live() async {
-    final data = await _api.get('/api/staff/locations/live');
+    final data = await _api.get('/staff/locations/live');
     final rows = data is List ? asList(data) : asList(asMap(data)['staff']);
     return rows
         .map(StaffLocation.fromJson)
@@ -40,7 +40,7 @@ class LocationApiService {
     required String date,
   }) async {
     final data = await _api.get(
-      '/api/staff/locations/history',
+      '/staff/locations/history',
       query: {'userId': userId, 'date': date},
     );
     return StaffRoute.fromJson(userId, date, _routeBody(data));
@@ -50,7 +50,7 @@ class LocationApiService {
   Future<StaffRoute> myRoute({required int userId, String? date}) async {
     final day = date ?? todayIso();
     final data = await _api.get(
-      '/api/staff/locations/me',
+      '/staff/locations/me',
       query: {'date': day},
     );
     return StaffRoute.fromJson(userId, day, _routeBody(data));

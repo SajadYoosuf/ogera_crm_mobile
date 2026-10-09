@@ -8,78 +8,199 @@ import 'package:ogera_crm_mobile/models/contact.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 import 'package:ogera_crm_mobile/view_models/contacts_view_model.dart';
 
+const _sources = [
+  {'id': 1, 'name': 'Meta', 'slug': 'meta'},
+  {'id': 3, 'name': 'Offline', 'slug': 'offline'},
+  {'id': 4, 'name': 'Showroom', 'slug': 'showroom'},
+];
+
+/// An API that records every call and answers `/lead-sources` and `POST /contacts`.
+class _Recorder {
+  final calls = <http.Request>[];
+  Map<String, dynamic>? posted;
+
+  ApiClient get api => ApiClient(
+    baseUrl: 'https://crm.test',
+    client: MockClient((request) async {
+      calls.add(request);
+      if (request.url.path == '/lead-sources') {
+        return http.Response(jsonEncode(_sources), 200);
+      }
+      posted = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        jsonEncode({
+          ...posted!,
+          'id': 31,
+          'created_at': '2026-09-10T00:00:00',
+          'lead_source': _sources.firstWhere(
+            (s) => s['id'] == posted!['lead_source_id'],
+            orElse: () => const {},
+          ),
+        }),
+        201,
+      );
+    }),
+  );
+}
+
 void main() {
   group('ContactFormViewModel', () {
     test('requires campaign staff before saving a campaign target', () async {
-      var wasCalled = false;
-      final viewModel = ContactFormViewModel(
-        ContactsService(
-          ApiClient(
-            baseUrl: 'https://crm.test',
-            client: MockClient((request) async {
-              wasCalled = true;
-              return http.Response('{}', 500);
-            }),
-          ),
-        ),
-      );
+      final recorder = _Recorder();
+      final viewModel = ContactFormViewModel(ContactsService(recorder.api));
 
       viewModel.setCampaign(isTarget: true);
-
       final saved = await viewModel.save();
 
       expect(saved, isNull);
-      expect(wasCalled, isFalse);
+      expect(recorder.calls, isEmpty);
       expect(
         viewModel.error,
         'Select which staff this campaign-target contact belongs to.',
       );
     });
 
-    test('creates a contact with selected dropdown values', () async {
-      Map<String, dynamic>? payload;
+    test(
+      'asks for a district and an address before calling the server',
+      () async {
+        final recorder = _Recorder();
+        final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+        viewModel.draft
+          ..phone = '9876543210'
+          ..source = 'showroom';
+
+        expect(await viewModel.save(), isNull);
+        expect(viewModel.error, 'Select the district.');
+
+        viewModel.draft.district = 'Malappuram';
+        expect(await viewModel.save(), isNull);
+        expect(viewModel.error, 'Enter the address.');
+        expect(recorder.calls, isEmpty);
+      },
+    );
+
+    test('an Offline contact must come with a captured location', () async {
+      final recorder = _Recorder();
+      final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+      viewModel.draft
+        ..phone = '9876543210'
+        ..source = 'offline'
+        ..district = 'Malappuram'
+        ..address = 'Near the bus stand';
+
+      expect(await viewModel.save(), isNull);
+      expect(viewModel.error, 'Capture the location for an Offline contact.');
+      expect(recorder.calls, isEmpty);
+    });
+
+    test(
+      'creates a contact as a consumer with the source resolved to its id',
+      () async {
+        final recorder = _Recorder();
+        final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+        viewModel.draft
+          ..name = 'Amina'
+          ..phone = '9876543210'
+          ..source = 'showroom'
+          ..district = 'Malappuram'
+          ..address = 'Near the bus stand'
+          ..houseStage = 'Ready';
+
+        final saved = await viewModel.save();
+
+        expect(saved, isNotNull);
+        expect(saved!.id, 31);
+        expect(recorder.calls.last.method, 'POST');
+        expect(recorder.calls.last.url.path, '/contacts');
+        expect(recorder.posted, containsPair('contact_type', 'consumer'));
+        expect(recorder.posted, containsPair('name', 'Amina'));
+        expect(recorder.posted, containsPair('phone', '9876543210'));
+        expect(recorder.posted, containsPair('district', 'Malappuram'));
+        expect(recorder.posted, containsPair('address', 'Near the bus stand'));
+        expect(recorder.posted, containsPair('lead_source_id', 4));
+        expect(recorder.posted!['consumer_profile'], {
+          'awareness_mode': 0,
+          'house_stage': 'Ready',
+        });
+        // Coordinates are only allowed with the Offline source.
+        expect(recorder.posted!.containsKey('latitude'), isFalse);
+      },
+    );
+
+    test('a new contact defaults to the Offline source', () {
+      final viewModel = ContactFormViewModel(ContactsService(_Recorder().api));
+      expect(viewModel.draft.source, 'offline');
+    });
+
+    test('an awareness contact is stored with awareness_mode 1', () async {
+      final recorder = _Recorder();
+      final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+      viewModel.setType(ContactType.awareness);
+      viewModel.draft
+        ..phone = '9876543210'
+        ..source = 'meta'
+        ..district = 'Kannur'
+        ..address = 'Main road';
+
+      await viewModel.save();
+
+      expect(recorder.posted!['consumer_profile'], {'awareness_mode': 1});
+      // No name typed: the phone number stands in so the API accepts it.
+      expect(recorder.posted, containsPair('name', '9876543210'));
+    });
+
+    test('an Offline contact sends its coordinates', () async {
+      final recorder = _Recorder();
+      final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+      viewModel.draft
+        ..phone = '9876543210'
+        ..source = 'offline'
+        ..district = 'Kannur'
+        ..address = 'Main road'
+        ..latitude = '11.250000'
+        ..longitude = '75.780000';
+
+      await viewModel.save();
+
+      expect(recorder.posted, containsPair('lead_source_id', 3));
+      expect(recorder.posted, containsPair('latitude', 11.25));
+      expect(recorder.posted, containsPair('longitude', 75.78));
+    });
+
+    test('a referral by another contact is sent as referred_by_id', () async {
+      final recorder = _Recorder();
+      final viewModel = ContactFormViewModel(ContactsService(recorder.api));
+      viewModel.setContactReferral(77);
+      viewModel.draft
+        ..phone = '9876543210'
+        ..source = 'meta'
+        ..district = 'Kannur'
+        ..address = 'Main road';
+
+      await viewModel.save();
+
+      expect(recorder.posted, containsPair('referred_by_id', 77));
+    });
+
+    test('surfaces the server message when the save is rejected', () async {
       final api = ApiClient(
         baseUrl: 'https://crm.test',
-        client: MockClient((request) async {
-          expect(request.method, 'POST');
-          expect(request.url.path, '/api/contacts');
-          payload = jsonDecode(request.body) as Map<String, dynamic>;
-          return http.Response(
-            jsonEncode({
-              'success': true,
-              'data': {
-                'id': 31,
-                'phone': payload!['phone'],
-                'name': payload!['name'],
-                'contactType': payload!['contactType'],
-                'source': payload!['source'],
-                'district': payload!['district'],
-                'houseStage': payload!['houseStage'],
-                'createdAt': '2026-09-10T00:00:00.000Z',
-              },
-            }),
-            200,
-          );
-        }),
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'detail': 'Lead source not found'}),
+            400,
+          ),
+        ),
       );
       final viewModel = ContactFormViewModel(ContactsService(api));
       viewModel.draft
-        ..name = 'Amina'
         ..phone = '9876543210'
-        ..source = 'showroom'
-        ..district = 'Malappuram'
-        ..houseStage = 'Ready';
+        ..source = null
+        ..district = 'Kannur'
+        ..address = 'Main road';
 
-      final saved = await viewModel.save();
-
-      expect(saved, isNotNull);
-      expect(saved!.id, 31);
-      expect(payload, containsPair('name', 'Amina'));
-      expect(payload, containsPair('phone', '9876543210'));
-      expect(payload, containsPair('source', 'showroom'));
-      expect(payload, containsPair('district', 'Malappuram'));
-      expect(payload, containsPair('houseStage', 'Ready'));
-      expect(payload, containsPair('contactType', ContactType.lead.id));
+      expect(await viewModel.save(), isNull);
+      expect(viewModel.error, 'Lead source not found');
     });
   });
 }

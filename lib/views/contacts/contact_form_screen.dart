@@ -3,11 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/reference/crm_options.dart';
-import '../../core/utils/formatters.dart';
 import '../../core/widgets/form_fields.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../models/contact.dart';
-import '../../models/followup.dart';
 import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/contacts_view_model.dart';
@@ -60,24 +58,6 @@ class _ContactFormViewState extends State<_ContactFormView> {
   );
 
   ReferralChoice? _referral;
-  List<StaffMember> _staff = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    if (context.read<SessionViewModel>().isHead) {
-      _loadStaff();
-    }
-  }
-
-  Future<void> _loadStaff() async {
-    try {
-      final staff = await context.read<StaffDirectoryService>().list();
-      if (mounted) setState(() => _staff = staff);
-    } catch (_) {
-      // The campaign picker simply stays empty; it is optional.
-    }
-  }
 
   @override
   void dispose() {
@@ -118,7 +98,8 @@ class _ContactFormViewState extends State<_ContactFormView> {
   Future<void> _pickReferral() async {
     final choice = await showReferralPicker(
       context,
-      canSearchSales: context.read<SessionViewModel>().isHead,
+      // The sales register is not linked to contacts on the server.
+      canSearchSales: false,
     );
     if (choice == null) return;
     setState(() => _referral = choice);
@@ -129,15 +110,8 @@ class _ContactFormViewState extends State<_ContactFormView> {
       case ReferralSource.contact:
         _viewModel.setContactReferral(choice.contact!.id);
       case ReferralSource.professional:
-        final professional = choice.professional!;
-        _viewModel.setProfessionalReferral(
-          type: professional.type.id,
-          name: professional.displayName,
-          phone: professional.phone,
-          address: professional.address,
-          latitude: professional.latitude,
-          longitude: professional.longitude,
-        );
+        // A professional is a partner contact, so it is referred by id.
+        _viewModel.setContactReferral(choice.professional!.id);
     }
   }
 
@@ -145,7 +119,6 @@ class _ContactFormViewState extends State<_ContactFormView> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<ContactFormViewModel>();
     final draft = viewModel.draft;
-    final isHead = context.read<SessionViewModel>().isHead;
 
     return Scaffold(
       appBar: AppBar(
@@ -153,124 +126,168 @@ class _ContactFormViewState extends State<_ContactFormView> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        // A Column, not a lazy ListView: every field must exist for the
+        // form's validators to run, including the ones below the fold.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
             OgeraSpacing.screen,
             OgeraSpacing.screen,
             OgeraSpacing.screen,
             120,
           ),
-          children: [
-            OgeraSegmentedField<ContactType>(
-              label: 'Contact type',
-              values: ContactType.values,
-              selected: draft.contactType,
-              labelOf: (type) => type.label,
-              iconOf: (type) => type == ContactType.lead
-                  ? Icons.trending_up_rounded
-                  : Icons.campaign_outlined,
-              onChanged: viewModel.setType,
-            ),
-
-            const SectionHeader(
-              title: 'Who',
-              icon: Icons.person_outline_rounded,
-            ),
-            OgeraTextField(
-              label: 'Name',
-              controller: _nameController,
-              icon: Icons.badge_outlined,
-              hint: 'Full name',
-              maxLength: 255,
-            ),
-            OgeraTextField(
-              label: 'Phone',
-              controller: _phoneController,
-              icon: Icons.call_outlined,
-              keyboardType: TextInputType.phone,
-              required: true,
-              maxLength: 20,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
-              ],
-              validator: viewModel.validatePhone,
-            ),
-            OgeraPickerField(
-              label: 'Source',
-              icon: Icons.input_rounded,
-              value: draft.source == null
-                  ? null
-                  : CrmOptions.sourceLabel(draft.source!),
-              placeholder: 'Not recorded',
-              onClear: () => setState(() => draft.source = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Source',
-                  options: CrmOptions.contactSources,
-                  labelOf: CrmOptions.sourceLabel,
-                  selected: draft.source,
-                  searchable: false,
-                );
-                if (picked != null) setState(() => draft.source = picked);
-              },
-            ),
-
-            const SectionHeader(title: 'Where', icon: Icons.place_outlined),
-            LocationCaptureField(
-              latitude: draft.latitude,
-              longitude: draft.longitude,
-              address: draft.address,
-              onChanged: (latitude, longitude, address) {
-                viewModel.setLocation(latitude: latitude, longitude: longitude);
-                // A resolved address only fills an empty field; it never
-                // overwrites something the user typed.
-                if (address != null && _addressController.text.trim().isEmpty) {
-                  _addressController.text = address;
-                }
-              },
-            ),
-            OgeraTextField(
-              label: 'Address',
-              controller: _addressController,
-              icon: Icons.home_outlined,
-              maxLines: 2,
-              maxLength: 1000,
-            ),
-
-            const SectionHeader(title: 'Referral', icon: Icons.share_outlined),
-            _ReferralField(
-              label: _referralLabel(draft),
-              onPick: _pickReferral,
-              onClear: () {
-                setState(() => _referral = null);
-                viewModel.clearReferral();
-              },
-            ),
-
-            if (isHead) ...[
-              const SectionHeader(
-                title: 'Campaign',
-                icon: Icons.campaign_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OgeraSegmentedField<ContactType>(
+                label: 'Contact type',
+                values: ContactType.values,
+                selected: draft.contactType,
+                labelOf: (type) => type.label,
+                iconOf: (type) => type == ContactType.lead
+                    ? Icons.trending_up_rounded
+                    : Icons.campaign_outlined,
+                onChanged: viewModel.setType,
               ),
-              _CampaignField(
-                isTarget: draft.isCampaignTarget,
-                staffId: draft.campaignStaffId,
-                staff: _staff,
-                error: viewModel.error,
-                onChanged: (isTarget, staffId) =>
-                    viewModel.setCampaign(isTarget: isTarget, staffId: staffId),
+
+              const SectionHeader(
+                title: 'Who',
+                icon: Icons.person_outline_rounded,
+              ),
+              OgeraTextField(
+                label: 'Name',
+                controller: _nameController,
+                icon: Icons.badge_outlined,
+                hint: 'Full name',
+                maxLength: 150,
+              ),
+              OgeraTextField(
+                label: 'Phone',
+                controller: _phoneController,
+                icon: Icons.call_outlined,
+                keyboardType: TextInputType.phone,
+                required: true,
+                maxLength: 20,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
+                ],
+                validator: viewModel.validatePhone,
+              ),
+              OgeraPickerField(
+                label: 'Source',
+                icon: Icons.input_rounded,
+                value: draft.source == null
+                    ? null
+                    : CrmOptions.sourceLabel(draft.source!),
+                placeholder: 'Not recorded',
+                onClear: () => setState(() => draft.source = null),
+                onTap: () async {
+                  final picked = await showOptionPicker<String>(
+                    context,
+                    title: 'Source',
+                    options: CrmOptions.contactSources,
+                    labelOf: CrmOptions.sourceLabel,
+                    selected: draft.source,
+                    searchable: false,
+                  );
+                  if (picked != null) setState(() => draft.source = picked);
+                },
+              ),
+
+              const SectionHeader(title: 'Where', icon: Icons.place_outlined),
+              OgeraPickerField(
+                label: 'District',
+                icon: Icons.map_outlined,
+                required: true,
+                value: draft.district,
+                placeholder: 'Select district',
+                onClear: () => setState(() => draft.district = null),
+                onTap: () async {
+                  final picked = await showOptionPicker<String>(
+                    context,
+                    title: 'District',
+                    options: CrmOptions.districts,
+                    labelOf: (value) => value,
+                    selected: draft.district,
+                    searchHint: 'Search district',
+                  );
+                  if (picked != null) setState(() => draft.district = picked);
+                },
+              ),
+              LocationCaptureField(
+                latitude: draft.latitude,
+                longitude: draft.longitude,
+                address: draft.address,
+                onChanged: (latitude, longitude, address) {
+                  viewModel.setLocation(
+                    latitude: latitude,
+                    longitude: longitude,
+                  );
+                  // A resolved address only fills an empty field; it never
+                  // overwrites something the user typed.
+                  if (address != null &&
+                      _addressController.text.trim().isEmpty) {
+                    _addressController.text = address;
+                  }
+                },
+              ),
+              OgeraTextField(
+                label: 'Address',
+                controller: _addressController,
+                icon: Icons.home_outlined,
+                required: true,
+                maxLines: 2,
+                maxLength: 255,
+                validator: (value) =>
+                    (value ?? '').trim().isEmpty ? 'Enter the address.' : null,
+              ),
+              OgeraPickerField(
+                label: 'House stage',
+                icon: Icons.home_work_outlined,
+                value: draft.houseStage,
+                placeholder: 'Not recorded',
+                onClear: () => setState(() => draft.houseStage = null),
+                onTap: () async {
+                  final picked = await showOptionPicker<String>(
+                    context,
+                    title: 'House stage',
+                    options: CrmOptions.houseStageBases,
+                    labelOf: (value) => value,
+                    selected: CrmOptions.baseOfHouseStage(draft.houseStage),
+                    searchable: false,
+                  );
+                  if (picked != null) {
+                    setState(
+                      () => draft.houseStage = CrmOptions.composeHouseStage(
+                        picked,
+                        null,
+                      ),
+                    );
+                  }
+                },
+              ),
+
+              const SectionHeader(
+                title: 'Referral',
+                icon: Icons.share_outlined,
+              ),
+              _ReferralField(
+                label: _referralLabel(draft),
+                onPick: _pickReferral,
+                onClear: () {
+                  setState(() => _referral = null);
+                  viewModel.clearReferral();
+                },
+              ),
+
+              const SectionHeader(title: 'Notes', icon: Icons.notes_rounded),
+              OgeraTextField(
+                label: 'Remarks',
+                controller: _remarksController,
+                maxLines: 4,
+                maxLength: 2000,
               ),
             ],
-
-            const SectionHeader(title: 'Notes', icon: Icons.notes_rounded),
-            OgeraTextField(
-              label: 'Remarks',
-              controller: _remarksController,
-              maxLines: 4,
-              maxLength: 2000,
-            ),
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: _SaveBar(
@@ -355,70 +372,6 @@ class _ReferralField extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _CampaignField extends StatelessWidget {
-  const _CampaignField({
-    required this.isTarget,
-    required this.staffId,
-    required this.staff,
-    required this.error,
-    required this.onChanged,
-  });
-
-  final bool isTarget;
-  final String? staffId;
-  final List<StaffMember> staff;
-  final String? error;
-  final void Function(bool isTarget, String? staffId) onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SwitchListTile.adaptive(
-          value: isTarget,
-          onChanged: (value) => onChanged(value, value ? staffId : null),
-          title: const Text(
-            'Campaign target',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-          subtitle: const Text(
-            'Assign this contact to a staff member for a campaign push.',
-            style: TextStyle(fontSize: 12.5, color: OgeraColors.muted),
-          ),
-          contentPadding: EdgeInsets.zero,
-          activeThumbColor: OgeraColors.blue,
-        ),
-        if (isTarget) ...[
-          const SizedBox(height: 10),
-          OgeraPickerField(
-            label: 'Campaign staff',
-            icon: Icons.person_pin_rounded,
-            required: true,
-            errorText: error,
-            value: firstOrNull(
-              staff
-                  .where((member) => member.id == staffId)
-                  .map((member) => member.name),
-            ),
-            onTap: () async {
-              final picked = await showOptionPicker<StaffMember>(
-                context,
-                title: 'Campaign staff',
-                options: staff,
-                labelOf: (member) => member.name,
-                selected: firstOrNull(
-                  staff.where((member) => member.id == staffId),
-                ),
-              );
-              if (picked != null) onChanged(true, picked.id);
-            },
-          ),
-        ],
-      ],
     );
   }
 }

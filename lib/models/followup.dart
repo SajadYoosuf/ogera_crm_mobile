@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/utils/formatters.dart';
 import '../theme/ogera_colors.dart';
+import 'contact.dart';
 
 /// A lead on the follow-up board. It is a `contacts` row with a stage, which is
 /// why it carries the qualification fields the pipeline gates on.
@@ -26,6 +27,7 @@ class Lead {
     this.followupAssignedTo,
     this.followupAssignedUserId,
     this.followupDueDate,
+    this.missingFields = const [],
   });
 
   final int id;
@@ -48,6 +50,10 @@ class Lead {
   final int? followupAssignedUserId;
   final String? followupDueDate;
 
+  /// Details the API still wants before this lead may leave the first stage
+  /// (`district`, `house_stage`, `lead_source`, ...). Empty once verified.
+  final List<String> missingFields;
+
   String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
 
   double? get lat => asDouble(latitude);
@@ -56,27 +62,59 @@ class Lead {
   DateTime? get dueDate =>
       followupDueDate == null ? null : DateTime.tryParse(followupDueDate!);
 
-  /// A lead only moves past the first stage once these five details are filled
-  /// in — the same rule the web board enforces.
+  /// A lead only moves past the first stage once its required details are
+  /// filled in; the API enforces the same rule with a 409 listing the gaps.
   static const qualificationFields = [
-    'Panchayath',
-    'Ward',
-    'Water source',
+    'Name',
+    'Phone',
+    'District',
+    'Address',
+    'Lead source',
     'House stage',
-    'Tank size interest',
   ];
 
-  List<String> get missingQualification {
-    final missing = <String>[];
-    if ((panchayath ?? '').isEmpty) missing.add('Panchayath');
-    if ((ward ?? '').isEmpty) missing.add('Ward');
-    if ((waterSource ?? '').isEmpty) missing.add('Water source');
-    if ((houseStage ?? '').isEmpty) missing.add('House stage');
-    if ((tankSizeInterest ?? '').isEmpty) missing.add('Tank size interest');
-    return missing;
-  }
+  static const _fieldLabels = <String, String>{
+    'name': 'Name',
+    'phone': 'Phone',
+    'district': 'District',
+    'address': 'Address',
+    'lead_source': 'Lead source',
+    'house_stage': 'House stage',
+    'work_area': 'Work area',
+    'created_by': 'Added by',
+  };
 
-  bool get isQualified => missingQualification.isEmpty;
+  /// Human labels for [missingFields].
+  List<String> get missingQualification => [
+    for (final field in missingFields)
+      _fieldLabels[field] ?? humanizeSlug(field),
+  ];
+
+  bool get isQualified => missingFields.isEmpty;
+
+  /// The same lead with a follow-up date taken from its open tasks.
+  Lead withDueDate(String? dueDate) => Lead(
+    id: id,
+    phone: phone,
+    createdAt: createdAt,
+    name: name,
+    address: address,
+    district: district,
+    panchayath: panchayath,
+    ward: ward,
+    houseStage: houseStage,
+    currentTank: currentTank,
+    waterSource: waterSource,
+    tankSizeInterest: tankSizeInterest,
+    remarks: remarks,
+    latitude: latitude,
+    longitude: longitude,
+    stage: stage,
+    followupAssignedTo: followupAssignedTo,
+    followupAssignedUserId: followupAssignedUserId,
+    followupDueDate: dueDate,
+    missingFields: missingFields,
+  );
 
   DueBucket get dueBucket {
     final due = dueDate;
@@ -89,27 +127,25 @@ class Lead {
     return DueBucket.upcoming;
   }
 
+  /// A lead is a consumer contact on the board: a `GET /contacts` row. Its
+  /// follow-up date is not on the row; the service fills it in from `/tasks`.
   factory Lead.fromJson(Map<String, dynamic> json) {
+    final contact = Contact.fromJson(json);
     return Lead(
-      id: asInt(json['id']) ?? 0,
-      phone: asText(json['phone']) ?? '',
-      createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
-      name: asText(json['name']),
-      address: asText(json['address']),
-      district: asText(json['district']),
-      panchayath: asText(json['panchayath']),
-      ward: asText(json['ward']),
-      houseStage: asText(json['houseStage']),
-      currentTank: asText(json['currentTank']),
-      waterSource: asText(json['waterSource']),
-      tankSizeInterest: asText(json['tankSizeInterest']),
-      remarks: asText(json['remarks']),
-      latitude: asText(json['latitude']),
-      longitude: asText(json['longitude']),
-      stage: asText(json['stage']),
-      followupAssignedTo: asText(json['followupAssignedTo']),
-      followupAssignedUserId: asInt(json['followupAssignedUserId']),
-      followupDueDate: asText(json['followupDueDate'])?.substring(0, 10),
+      id: contact.id,
+      phone: contact.phone,
+      createdAt: contact.createdAt,
+      name: contact.name,
+      address: contact.address,
+      district: contact.district,
+      houseStage: contact.houseStage,
+      currentTank: contact.currentTank,
+      latitude: contact.latitude,
+      longitude: contact.longitude,
+      stage: contact.stage,
+      followupAssignedTo: contact.followupAssignedTo,
+      followupAssignedUserId: contact.followupAssignedUserId,
+      missingFields: contact.missingFields,
     );
   }
 }
@@ -127,7 +163,8 @@ enum DueBucket {
   final IconData icon;
 }
 
-/// Stages come from the `pipeline_stages` table; the app never hardcodes them.
+/// Pipeline stages, from `GET /contacts/stage-types`. The API fixes the list;
+/// the app never hardcodes it.
 class Stage {
   const Stage({
     required this.id,
@@ -143,7 +180,7 @@ class Stage {
     return Stage(
       id: asText(json['id']) ?? '',
       label: asText(json['label']) ?? humanizeSlug(asText(json['id']) ?? ''),
-      orderIndex: asInt(json['orderIndex']) ?? 0,
+      orderIndex: asInt(json['order_index'] ?? json['orderIndex']) ?? 0,
     );
   }
 
@@ -201,9 +238,62 @@ class Remark {
       staffName: asText(json['staffName']),
     );
   }
+
+  static const _typeLabels = <String, String>{
+    'phone_call': 'Call',
+    'field_visit': 'Field visit',
+    'whatsapp': 'WhatsApp',
+    'quote': 'Quote',
+    'demo': 'Demo',
+    'internal_note': 'Note',
+  };
+
+  /// One row of `GET /contacts/{id}/activities`: a logged note or a follow-up.
+  factory Remark.fromActivity(Map<String, dynamic> json) {
+    final type = _typeLabels[asText(json['type'])] ?? 'Activity';
+    final notes = asText(json['notes']);
+    final scheduled = asText(json['scheduled_date']);
+    final status = asText(json['status']);
+
+    String text;
+    if (scheduled != null && status == 'pending') {
+      text =
+          '$type follow-up due $scheduled${notes == null ? '' : ' · $notes'}';
+    } else if (scheduled != null) {
+      text = '$type follow-up done${notes == null ? '' : ' · $notes'}';
+    } else if (type == 'Note') {
+      text = notes ?? '';
+    } else {
+      text = '$type${notes == null ? '' : ' · $notes'}';
+    }
+    return Remark(
+      id: asInt(json['id']) ?? 0,
+      staffId: asText(json['created_by']) ?? '',
+      remark: text,
+      isSystem: scheduled != null,
+      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
+      staffName: asText(json['created_by_name']),
+    );
+  }
+
+  /// One row of `GET /contacts/{id}/stages`, shown as a system line.
+  factory Remark.fromStageChange(Map<String, dynamic> json) {
+    final stage = humanizeSlug(asText(json['stage']) ?? '');
+    final reason = asText(json['loss_reason']);
+    return Remark(
+      // Offset so a stage row never collides with an activity row's id.
+      id: -(asInt(json['id']) ?? 0),
+      staffId: asText(json['changed_by']) ?? '',
+      remark: reason == null
+          ? 'Stage changed to $stage'
+          : 'Stage changed to $stage (${humanizeSlug(reason)})',
+      isSystem: true,
+      createdAt: parseDate(json['changed_at']) ?? DateTime.now(),
+    );
+  }
 }
 
-/// A selectable staff member, from `/api/staff`.
+/// A selectable staff member, from `GET /employees/directory`.
 class StaffMember {
   const StaffMember({required this.id, required this.name});
 

@@ -76,7 +76,7 @@ class LocationDebugTick {
   final DateTime? lastUploadAt;
 
   /// Why the last upload attempt failed, if it did. A 404 here means the
-  /// server has no `/api/staff/locations` route yet.
+  /// server has no `/staff/locations` route yet.
   final String? lastError;
 
   bool get hasFix => latitude != null && longitude != null;

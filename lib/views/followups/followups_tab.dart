@@ -83,7 +83,7 @@ class _HeadBoardState extends State<_HeadBoard> {
           const SizedBox(width: 4),
         ],
       ),
-      floatingActionButton: viewModel.canManageStages
+      floatingActionButton: viewModel.canAssign
           ? FloatingActionButton.extended(
               onPressed: () => openLeadForm(context),
               icon: const Icon(Icons.person_add_alt_1_rounded),
@@ -107,8 +107,8 @@ class _HeadBoardState extends State<_HeadBoard> {
               icon: Icons.view_column_outlined,
               title: 'No pipeline stages',
               message:
-                  'Add the stages your team works through, and leads will '
-                  'flow between them.',
+                  'The server has not sent the pipeline stages yet. Pull '
+                  'down to try again.',
               actionLabel: viewModel.canManageStages ? 'Manage stages' : null,
               onAction: viewModel.canManageStages
                   ? () => showManageStages(context)
@@ -130,7 +130,7 @@ class _HeadBoardState extends State<_HeadBoard> {
                 ),
                 child: OgeraSearchField(
                   controller: _searchController,
-                  hint: 'Search leads by name, phone, or panchayath',
+                  hint: 'Search leads by name or phone',
                   onChanged: viewModel.search,
                 ),
               ),

@@ -1,5 +1,8 @@
 import '../core/utils/formatters.dart';
 
+/// The mobile app's two kinds of consumer contact. The API has no such type:
+/// both are `consumer` contacts, told apart by the consumer profile's
+/// `awareness_mode` (1 = still needs education, 0 or unset = sales-ready).
 enum ContactType {
   lead('lead', 'Lead'),
   awareness('awareness', 'Awareness');
@@ -11,10 +14,14 @@ enum ContactType {
 
   static ContactType fromId(String? value) =>
       value == 'awareness' ? ContactType.awareness : ContactType.lead;
+
+  /// The `awareness_mode` the API stores for this kind of contact.
+  int get awarenessMode => this == ContactType.awareness ? 1 : 0;
 }
 
-/// Mirrors the `contacts` row exposed by `/api/contacts`. Every field the web
-/// app stores is preserved, including the referral snapshot and campaign flags.
+/// A consumer contact as returned by `GET /contacts` (slim row) or
+/// `GET /contacts/{id}` (full detail). Fields the API has no column for
+/// (panchayath, ward, water source, campaign flags and the like) stay null.
 class Contact {
   const Contact({
     required this.id,
@@ -56,6 +63,9 @@ class Contact {
     this.followupAssignedUserId,
     this.followupDueDate,
     this.updatedAt,
+    this.leadSourceId,
+    this.assignedToName,
+    this.missingFields = const [],
   });
 
   final int id;
@@ -64,6 +74,8 @@ class Contact {
   final DateTime createdAt;
   final String? name;
   final String? countryCode;
+
+  /// The lead source's slug (`meta`, `website`, `offline`, ...).
   final String? source;
   final String? address;
   final String? district;
@@ -93,10 +105,20 @@ class Contact {
   final String? addedBy;
   final int? createdByUserId;
   final String? stage;
+
+  /// The employee who owns the contact (`assigned_to`), as a string id.
   final String? followupAssignedTo;
   final int? followupAssignedUserId;
   final String? followupDueDate;
   final DateTime? updatedAt;
+  final int? leadSourceId;
+  final String? assignedToName;
+
+  /// What the API still wants before this contact counts as verified
+  /// (`district`, `house_stage`, `lead_source`, ...). Empty when verified.
+  final List<String> missingFields;
+
+  bool get isVerified => missingFields.isEmpty;
 
   String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
 
@@ -120,51 +142,58 @@ class Contact {
   }
 
   factory Contact.fromJson(Map<String, dynamic> json) {
+    final profile = _map(json['consumer_profile']);
+    final stage = _map(json['lead_stage'] ?? json['current_stage']);
+    final source = _map(json['lead_source']);
+    final referrer = _map(json['referred_by']);
+    final assigned = json['assigned_to'];
+    final assignedEmployee = _map(
+      assigned is Map ? assigned : json['assigned_employee'],
+    );
+    final creator = json['created_by'];
+    final awarenessMode =
+        asInt(json['awareness_mode']) ?? asInt(profile['awareness_mode']);
+    final assignedId = assigned is Map
+        ? asInt(assigned['id'])
+        : asInt(assigned) ?? asInt(assignedEmployee['id']);
+    final createdBy = creator is Map ? asInt(creator['id']) : asInt(creator);
+
     return Contact(
       id: asInt(json['id']) ?? 0,
       phone: asText(json['phone']) ?? '',
-      contactType: ContactType.fromId(asText(json['contactType'])),
-      createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
+      contactType: awarenessMode == 1
+          ? ContactType.awareness
+          : ContactType.lead,
+      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
       name: asText(json['name']),
-      countryCode: asText(json['countryCode']),
-      source: asText(json['source']),
+      source: asText(source['slug']),
+      leadSourceId: asInt(source['id']) ?? asInt(json['lead_source_id']),
       address: asText(json['address']),
       district: asText(json['district']),
-      panchayath: asText(json['panchayath']),
-      ward: asText(json['ward']),
-      houseStage: asText(json['houseStage']),
-      currentTank: asText(json['currentTank']),
-      waterSource: asText(json['waterSource']),
-      tankSizeInterest: asText(json['tankSizeInterest']),
-      awarenessLevel: asText(json['awarenessLevel']),
-      remarks: asText(json['remarks']),
+      houseStage: asText(profile['house_stage']),
+      currentTank: asText(profile['current_tank_type']),
       latitude: asText(json['latitude']),
       longitude: asText(json['longitude']),
-      referredBySaleId: asInt(json['referredBySaleId']),
-      referredByContactId: asInt(json['referredByContactId']),
-      referredBySaleBuyerName: asText(json['referredBySaleBuyerName']),
-      referredByContactName: asText(json['referredByContactName']),
-      referredByContactPhone: asText(json['referredByContactPhone']),
-      professionalType: asText(json['professionalType']),
-      professionalName: asText(json['professionalName']),
-      professionalPhone: asText(json['professionalPhone']),
-      professionalAddress: asText(json['professionalAddress']),
-      professionalLatitude: asText(json['professionalLatitude']),
-      professionalLongitude: asText(json['professionalLongitude']),
-      isCampaignTarget: json['isCampaignTarget'] == true,
-      campaignStaffId: asText(json['campaignStaffId']),
-      addedBy: asText(json['addedBy']),
-      createdByUserId: asInt(json['createdByUserId']),
-      stage: asText(json['stage']),
-      followupAssignedTo: asText(json['followupAssignedTo']),
-      followupAssignedUserId: asInt(json['followupAssignedUserId']),
-      followupDueDate: asText(json['followupDueDate'])?.substring(0, 10),
-      updatedAt: parseDate(json['updatedAt']),
+      referredByContactId:
+          asInt(referrer['id']) ?? asInt(json['referred_by_id']),
+      referredByContactName: asText(referrer['name']),
+      referredByContactPhone: asText(referrer['phone']),
+      addedBy: createdBy?.toString(),
+      createdByUserId: createdBy,
+      stage: asText(stage['stage']),
+      followupAssignedTo: assignedId?.toString(),
+      followupAssignedUserId: assignedId,
+      assignedToName: asText(assignedEmployee['name']),
+      updatedAt: parseDate(json['updated_at']),
+      missingFields: [
+        for (final field in (json['missing_fields'] as List?) ?? const [])
+          field.toString(),
+      ],
     );
   }
 
   /// True when this staff member may edit or delete the record. Admins and
-  /// sales heads always may; staff may only touch what they created. Legacy
+  /// managers always may; staff may only touch what they created. Legacy
   /// rows with no creator id belong to nobody and stay read-only for staff.
   bool isEditableBy({required int userId, required bool isPrivileged}) {
     if (isPrivileged) return true;
@@ -173,8 +202,7 @@ class Contact {
   }
 }
 
-/// Payload for create and update. Only non-null fields are sent, so an edit
-/// never blanks a column the form did not touch.
+/// Payload for create and update.
 class ContactDraft {
   ContactDraft({
     this.name,
@@ -263,11 +291,20 @@ class ContactDraft {
     );
   }
 
-  Map<String, dynamic> toJson() {
+  /// The `POST /contacts` / `PUT /contacts/{id}` body.
+  ///
+  /// [leadSourceId] is resolved by the service from the source slug. Only
+  /// non-blank fields are sent, so an edit never blanks a column the form did
+  /// not touch. Coordinates travel only with the Offline source: the API
+  /// requires them there and rejects them anywhere else.
+  Map<String, dynamic> toApiJson({int? leadSourceId, bool offline = false}) {
+    final trimmedName = (name ?? '').trim();
     final json = <String, dynamic>{
+      'contact_type': 'consumer',
       'phone': phone.trim(),
-      'contactType': contactType.id,
-      'isCampaignTarget': isCampaignTarget,
+      // The API requires a name; fall back to the phone number so a quick
+      // capture is still saved and findable.
+      'name': trimmedName.isEmpty ? phone.trim() : trimmedName,
     };
     void put(String key, Object? value) {
       if (value == null) return;
@@ -275,34 +312,34 @@ class ContactDraft {
       json[key] = value is String ? value.trim() : value;
     }
 
-    put('name', name);
-    put('source', source);
-    put('address', address);
     put('district', district);
-    put('panchayath', panchayath);
-    put('ward', ward);
-    put('houseStage', houseStage);
-    put('currentTank', currentTank);
-    put('waterSource', waterSource);
-    put('tankSizeInterest', tankSizeInterest);
-    put('awarenessLevel', awarenessLevel);
-    put('remarks', remarks);
-    put('latitude', latitude);
-    put('longitude', longitude);
-    put('referredBySaleId', referredBySaleId);
-    put('referredByContactId', referredByContactId);
-    put('professionalType', professionalType);
-    put('professionalName', professionalName);
-    put('professionalPhone', professionalPhone);
-    put('professionalAddress', professionalAddress);
-    put('professionalLatitude', professionalLatitude);
-    put('professionalLongitude', professionalLongitude);
-    put('campaignStaffId', campaignStaffId);
+    put('address', address);
+    put('lead_source_id', leadSourceId);
+    put('referred_by_id', referredByContactId);
+    if (offline) {
+      final lat = double.tryParse((latitude ?? '').trim());
+      final lng = double.tryParse((longitude ?? '').trim());
+      if (lat != null && lng != null) {
+        json['latitude'] = lat;
+        json['longitude'] = lng;
+      }
+    }
+    json['consumer_profile'] = {
+      'awareness_mode': contactType.awarenessMode,
+      if ((houseStage ?? '').trim().isNotEmpty)
+        'house_stage': houseStage!.trim(),
+      if ((currentTank ?? '').trim().isNotEmpty)
+        'current_tank_type': currentTank!.trim(),
+    };
     return json;
   }
 }
 
-/// Result envelope for the paged contacts list.
+Map<String, dynamic> _map(dynamic value) =>
+    value is Map<String, dynamic> ? value : const {};
+
+/// One page of the contacts list. The API pages by `skip`/`limit`; this keeps
+/// the page arithmetic in one place for the view model.
 class ContactPage {
   const ContactPage({
     required this.contacts,
@@ -320,23 +357,30 @@ class ContactPage {
   final int leadsCount;
   final int awarenessCount;
 
-  factory ContactPage.fromJson(Map<String, dynamic> json) {
-    final rows = (json['contacts'] as List?) ?? const [];
+  factory ContactPage.fromJson(
+    Map<String, dynamic> json, {
+    int leadsCount = 0,
+    int awarenessCount = 0,
+  }) {
+    final rows = (json['items'] as List?) ?? const [];
+    final total = asInt(json['total']) ?? 0;
+    final limit = (asInt(json['limit']) ?? 20).clamp(1, 1 << 20);
+    final skip = asInt(json['skip']) ?? 0;
     return ContactPage(
       contacts: rows
           .whereType<Map<String, dynamic>>()
           .map(Contact.fromJson)
           .toList(growable: false),
-      total: asInt(json['total']) ?? 0,
-      page: asInt(json['page']) ?? 1,
-      totalPages: asInt(json['totalPages']) ?? 1,
-      leadsCount: asInt(json['leadsCount']) ?? 0,
-      awarenessCount: asInt(json['awarenessCount']) ?? 0,
+      total: total,
+      page: skip ~/ limit + 1,
+      totalPages: total == 0 ? 1 : (total + limit - 1) ~/ limit,
+      leadsCount: leadsCount,
+      awarenessCount: awarenessCount,
     );
   }
 }
 
-/// The trimmed shape returned by `/api/contacts?fields=map`.
+/// The trimmed shape returned by `GET /contacts/map`.
 class ContactPin {
   const ContactPin({
     required this.id,
@@ -369,7 +413,9 @@ class ContactPin {
       phone: asText(json['phone']) ?? '',
       latitude: lat,
       longitude: lng,
-      contactType: ContactType.fromId(asText(json['contactType'])),
+      contactType: asInt(json['awareness_mode']) == 1
+          ? ContactType.awareness
+          : ContactType.lead,
       name: asText(json['name']),
       stage: asText(json['stage']),
       address: asText(json['address']),

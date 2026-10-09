@@ -127,6 +127,7 @@ class ContactsViewModel extends ChangeNotifier {
         endDate: _endDate,
         page: page,
         limit: _pageSize,
+        withCounts: true,
       );
       if (sequence != _sequence) return;
 
@@ -297,10 +298,27 @@ class ContactFormViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The rules the API enforces on a contact, checked first so the user sees
+  /// them before a round-trip: district and address are required, and an
+  /// Offline lead must come with the place it was captured.
+  String? validateBeforeSave() {
+    if ((draft.district ?? '').trim().isEmpty) return 'Select the district.';
+    if ((draft.address ?? '').trim().isEmpty) return 'Enter the address.';
+    final offline =
+        LeadSourceCatalog.normalise(draft.source ?? '') == 'offline';
+    final hasLocation =
+        double.tryParse((draft.latitude ?? '').trim()) != null &&
+        double.tryParse((draft.longitude ?? '').trim()) != null;
+    if (offline && !hasLocation && _existing == null) {
+      return 'Capture the location for an Offline contact.';
+    }
+    return null;
+  }
+
   Future<Contact?> save() async {
-    final campaignError = validateCampaign();
-    if (campaignError != null) {
-      _error = campaignError;
+    final problem = validateCampaign() ?? validateBeforeSave();
+    if (problem != null) {
+      _error = problem;
       notifyListeners();
       return null;
     }

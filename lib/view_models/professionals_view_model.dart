@@ -168,7 +168,20 @@ class ProfessionalFormViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The API requires a district and an address on every contact.
+  String? validateBeforeSave() {
+    if ((draft.district ?? '').trim().isEmpty) return 'Select the district.';
+    if ((draft.address ?? '').trim().isEmpty) return 'Enter the address.';
+    return null;
+  }
+
   Future<Professional?> save() async {
+    final problem = validateBeforeSave();
+    if (problem != null) {
+      _error = problem;
+      notifyListeners();
+      return null;
+    }
     _isSaving = true;
     _error = null;
     notifyListeners();
@@ -177,10 +190,7 @@ class ProfessionalFormViewModel extends ChangeNotifier {
           ? await _service.create(draft)
           : await _service.update(_existing.id, draft);
     } on ApiException catch (error) {
-      // The API answers 409 when the phone already exists for this profession.
-      _error = error.code == 'DUPLICATE'
-          ? 'A ${draft.type.label.toLowerCase()} with this phone number already exists.'
-          : error.message;
+      _error = error.message;
       return null;
     } finally {
       _isSaving = false;

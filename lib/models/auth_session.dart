@@ -1,9 +1,15 @@
 import '../core/utils/formatters.dart';
 
-/// CRM roles, as issued by `/api/auth/login`.
+/// The app's three audiences, folded from the API's employee roles
+/// (`admin`, `manager`, `team_lead`, `sales_executive`, `tele_caller`,
+/// `field_executive`, `support`, and any custom role).
+///
+/// `admin` and `manager` are the "Head" audience, the same pair the API lets
+/// see the live staff map and the whole team's numbers. Every other role,
+/// including custom ones, is Staff.
 enum UserRole {
   admin('admin', 'Admin'),
-  salesHead('sales_head', 'Sales Head'),
+  salesHead('manager', 'Manager'),
   salesStaff('sales_staff', 'Sales Staff');
 
   const UserRole(this.id, this.label);
@@ -13,7 +19,7 @@ enum UserRole {
 
   static UserRole fromId(String? value) => switch (value) {
     'admin' => UserRole.admin,
-    'sales_head' => UserRole.salesHead,
+    'manager' || 'sales_head' => UserRole.salesHead,
     _ => UserRole.salesStaff,
   };
 
@@ -23,8 +29,8 @@ enum UserRole {
   bool get isStaff => this == UserRole.salesStaff;
 }
 
-/// Which login tab produced this session. The tab is a routing hint; the server
-/// verifies the role independently and answers `SCOPE_MISMATCH` on a mismatch.
+/// Which login tab produced this session. The tab is a routing hint checked on
+/// the phone only: the API has no scope guard, it simply signs the employee in.
 enum LoginScope {
   head('head', 'Head'),
   staff('staff', 'Staff');
@@ -38,8 +44,8 @@ enum LoginScope {
       this == LoginScope.head ? role.isHead : role.isStaff;
 
   String get mismatchMessage => this == LoginScope.head
-      ? 'This is a Sales Staff account. Use the Staff tab to sign in.'
-      : 'This is an Admin or Sales Head account. Use the Head tab to sign in.';
+      ? 'This is a Staff account. Use the Staff tab to sign in.'
+      : 'This is an Admin or Manager account. Use the Head tab to sign in.';
 }
 
 class AuthUser {
@@ -92,6 +98,20 @@ class AuthSession {
     'accessToken': accessToken,
     'user': user.toJson(),
   };
+
+  /// The `POST /auth/login` reply: `{ access_token, token_type, employee }`.
+  /// Returns null when the reply is missing either half.
+  static AuthSession? fromLogin(dynamic body) {
+    if (body is! Map<String, dynamic>) return null;
+    final token = body['access_token'];
+    final employee = body['employee'];
+    if (token is! String ||
+        token.isEmpty ||
+        employee is! Map<String, dynamic>) {
+      return null;
+    }
+    return AuthSession(accessToken: token, user: AuthUser.fromJson(employee));
+  }
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     return AuthSession(

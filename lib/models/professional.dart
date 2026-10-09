@@ -2,34 +2,63 @@ import 'package:flutter/material.dart';
 
 import '../core/utils/formatters.dart';
 
-/// The professions the CRM tracks. These ids must match the `professionals.type`
-/// enum in the database exactly — an id the server does not know is rejected
-/// with a 400 rather than silently coerced.
+/// The professions the CRM tracks. Each maps to the API's partner
+/// `profession_type` value; one the app does not know falls back to [other].
 enum ProfessionalType {
-  contractor('Contractor', Icons.engineering_rounded, Color(0xFFEA580C)),
-  engineer('Engineer', Icons.architecture_rounded, Color(0xFF2563EB)),
-  plumber('Plumber', Icons.plumbing_rounded, Color(0xFF0891B2)),
-  interiorDesigner('Interior Designer', Icons.chair_rounded, Color(0xFF9333EA)),
+  contractor(
+    'Contractor',
+    'contractor',
+    Icons.engineering_rounded,
+    Color(0xFFEA580C),
+  ),
+  engineer(
+    'Engineer',
+    'engineer',
+    Icons.architecture_rounded,
+    Color(0xFF2563EB),
+  ),
+  architect(
+    'Architect',
+    'architect',
+    Icons.foundation_rounded,
+    Color(0xFF0D9488),
+  ),
+  plumber('Plumber', 'plumber', Icons.plumbing_rounded, Color(0xFF0891B2)),
+  interiorDesigner(
+    'Interior Designer',
+    'interior_designer',
+    Icons.chair_rounded,
+    Color(0xFF9333EA),
+  ),
   electrician(
     'Electrician',
+    'electrician',
     Icons.electrical_services_rounded,
     Color(0xFFCA8A04),
   ),
-  other('Other', Icons.handyman_rounded, Color(0xFF64748B));
+  other('Other', 'other', Icons.handyman_rounded, Color(0xFF64748B));
 
-  const ProfessionalType(this.id, this.icon, this.color);
+  const ProfessionalType(this.id, this.apiValue, this.icon, this.color);
 
+  /// The display name, also what the screens and referral snapshots carry.
   final String id;
+
+  /// The `profession_type` the API stores.
+  final String apiValue;
   final IconData icon;
   final Color color;
 
   String get label => id;
 
+  /// Accepts either the display name or the API value, case-insensitively.
   /// Falls back to [other] rather than a real profession, so an unexpected
   /// value is never mislabelled as an engineer.
   static ProfessionalType fromId(String? value) {
+    final key = (value ?? '').trim().toLowerCase().replaceAll(' ', '_');
     return ProfessionalType.values.firstWhere(
-      (type) => type.id.toLowerCase() == (value ?? '').toLowerCase(),
+      (type) =>
+          type.apiValue == key ||
+          type.id.toLowerCase().replaceAll(' ', '_') == key,
       orElse: () => ProfessionalType.other,
     );
   }
@@ -81,21 +110,28 @@ class Professional {
     return parts.isEmpty ? null : parts.join(', ');
   }
 
+  /// A partner contact: a `GET /contacts` row (or detail) with
+  /// `contact_type = partner`. The partner's work area is the "place".
   factory Professional.fromJson(Map<String, dynamic> json) {
+    final profile = json['partner_profile'] is Map<String, dynamic>
+        ? json['partner_profile'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final creator = json['created_by'];
     return Professional(
       id: asInt(json['id']) ?? 0,
       phone: asText(json['phone']) ?? '',
-      type: ProfessionalType.fromId(asText(json['type'])),
-      createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
+      type: ProfessionalType.fromId(
+        asText(json['profession_type'] ?? profile['profession_type']),
+      ),
+      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
       name: asText(json['name']),
-      place: asText(json['place']),
+      place: asText(json['work_area'] ?? profile['work_area']),
       address: asText(json['address']),
       district: asText(json['district']),
-      panchayath: asText(json['panchayath']),
       latitude: asText(json['latitude']),
       longitude: asText(json['longitude']),
-      createdByUserId: asInt(json['createdByUserId']),
-      updatedAt: parseDate(json['updatedAt']),
+      createdByUserId: creator is Map ? asInt(creator['id']) : asInt(creator),
+      updatedAt: parseDate(json['updated_at']),
     );
   }
 
@@ -142,20 +178,36 @@ class ProfessionalDraft {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{'phone': phone.trim(), 'type': type.id};
+  /// The `POST /contacts` / `PUT /contacts/{id}` body for a partner.
+  ///
+  /// A location only travels with the Offline lead source (the API requires it
+  /// there and rejects it elsewhere), so [offlineSourceId] is attached
+  /// whenever coordinates are present.
+  Map<String, dynamic> toApiJson({int? offlineSourceId}) {
+    final trimmedName = (name ?? '').trim();
+    final json = <String, dynamic>{
+      'contact_type': 'partner',
+      'phone': phone.trim(),
+      'name': trimmedName.isEmpty ? phone.trim() : trimmedName,
+      'partner_profile': {
+        'profession_type': type.apiValue,
+        if ((place ?? '').trim().isNotEmpty) 'work_area': place!.trim(),
+      },
+    };
     void put(String key, String? value) {
       if (value == null || value.trim().isEmpty) return;
       json[key] = value.trim();
     }
 
-    put('name', name);
-    put('place', place);
     put('address', address);
     put('district', district);
-    put('panchayath', panchayath);
-    put('latitude', latitude);
-    put('longitude', longitude);
+    final lat = double.tryParse((latitude ?? '').trim());
+    final lng = double.tryParse((longitude ?? '').trim());
+    if (lat != null && lng != null && offlineSourceId != null) {
+      json['lead_source_id'] = offlineSourceId;
+      json['latitude'] = lat;
+      json['longitude'] = lng;
+    }
     return json;
   }
 }

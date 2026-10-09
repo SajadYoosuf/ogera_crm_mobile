@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ogera_crm_mobile/core/network/api_client.dart';
+import 'package:ogera_crm_mobile/core/widgets/form_fields.dart';
 import 'package:ogera_crm_mobile/models/professional.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
@@ -16,8 +17,16 @@ void main() {
     final viewModel = ProfessionalsViewModel(
       _FakeProfessionalsService(
         professionals: [
-          _professional(id: 1, name: 'Arun Plumber', type: ProfessionalType.plumber),
-          _professional(id: 2, name: 'Bina Engineer', type: ProfessionalType.engineer),
+          _professional(
+            id: 1,
+            name: 'Arun Plumber',
+            type: ProfessionalType.plumber,
+          ),
+          _professional(
+            id: 2,
+            name: 'Bina Engineer',
+            type: ProfessionalType.engineer,
+          ),
         ],
       ),
     );
@@ -42,10 +51,7 @@ void main() {
     await viewModel.load();
 
     await tester.pumpWidget(_professionalsHarness(viewModel));
-    await tester.enterText(
-      find.byType(TextField),
-      'missing professional',
-    );
+    await tester.enterText(find.byType(TextField), 'missing professional');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
 
@@ -65,26 +71,49 @@ void main() {
     await tester.pumpWidget(_formHarness(service));
 
     await tester.tap(find.text('Plumber'));
-    await tester.enterText(find.widgetWithText(TextFormField, 'Name'), 'Maya');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Phone *'),
-      '9876543210',
+    await _enter(tester, 'Name', 'Maya');
+    await _enter(tester, 'Phone *', '9876543210');
+    await _enter(tester, 'Place', 'Kochi');
+    await _enter(tester, 'Address *', 'Beach Road');
+    final district = find.byWidgetPredicate(
+      (widget) => widget is OgeraPickerField && widget.label == 'District',
     );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Place'),
-      'Kochi',
+    await tester.dragUntilVisible(
+      district,
+      find.byType(Scrollable).first,
+      const Offset(0, -200),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(district);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kozhikode').last);
+    await tester.pumpAndSettle();
+
     final submit = find.widgetWithText(FilledButton, 'Add professional');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
-    await tester.pumpAndSettle();
+    // The toast times out, so look before the animations settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(service.createdDraft?.type, ProfessionalType.plumber);
     expect(service.createdDraft?.name, 'Maya');
     expect(service.createdDraft?.phone, '9876543210');
     expect(service.createdDraft?.place, 'Kochi');
+    expect(service.createdDraft?.district, 'Kozhikode');
+    expect(service.createdDraft?.address, 'Beach Road');
     expect(find.text('Professional added.'), findsOneWidget);
   });
+}
+
+Future<void> _enter(WidgetTester tester, String label, String text) async {
+  final field = find.widgetWithText(TextFormField, label);
+  await tester.dragUntilVisible(
+    field,
+    find.byType(Scrollable).first,
+    const Offset(0, -200),
+  );
+  await tester.enterText(field, text);
 }
 
 Widget _professionalsHarness(ProfessionalsViewModel viewModel) {

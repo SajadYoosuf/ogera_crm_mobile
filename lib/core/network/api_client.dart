@@ -10,15 +10,30 @@ import '../config/app_config.dart';
 /// instead of showing one generic "something went wrong" for every case.
 enum FailureKind { offline, unauthorized, forbidden, notFound, server }
 
-/// Every CRM endpoint answers with `{ success, data }` or
-/// `{ success: false, error: { code, message } }`. [ApiException] carries the
-/// server's own message so screens can show it verbatim.
+/// The CRM API answers with plain JSON and reports problems as FastAPI's
+/// `{ "detail": ... }` (a string, a list of validation errors, or an object
+/// such as `{ message, missing_fields }`). [ApiException] carries the server's
+/// own message so screens can show it verbatim.
 class ApiException implements Exception {
-  const ApiException(this.message, {this.code, this.statusCode});
+  const ApiException(
+    this.message, {
+    this.code,
+    this.statusCode,
+    this.details = const {},
+  });
 
   final String message;
   final String? code;
   final int? statusCode;
+
+  /// The structured `detail` object when the server sent one, e.g. the
+  /// `missing_fields` behind a blocked stage change.
+  final Map<String, dynamic> details;
+
+  List<String> get missingFields => [
+    for (final field in (details['missing_fields'] as List?) ?? const [])
+      field.toString(),
+  ];
 
   bool get isUnauthorized => statusCode == 401;
   bool get isForbidden => statusCode == 403;
@@ -51,7 +66,11 @@ class ApiClient {
       _baseUrlOverride = baseUrl {
     _log(
       'server = $baseUrl '
-      '(${kReleaseMode ? 'release' : kProfileMode ? 'profile' : 'debug'} build)',
+      '(${kReleaseMode
+          ? 'release'
+          : kProfileMode
+          ? 'profile'
+          : 'debug'} build)',
     );
   }
 
@@ -60,6 +79,10 @@ class ApiClient {
 
   String? _accessToken;
   VoidCallback? onUnauthorized;
+
+  /// The signed-in employee's id. A few endpoints (stage changes) want the
+  /// caller named in the body.
+  int? currentUserId;
 
   static const _timeout = Duration(seconds: 20);
 
@@ -84,6 +107,10 @@ class ApiClient {
 
   Future<dynamic> put(String path, {Object? body}) {
     return _send('PUT', path, body: body);
+  }
+
+  Future<dynamic> patch(String path, {Object? body}) {
+    return _send('PATCH', path, body: body);
   }
 
   Future<dynamic> delete(String path, {Object? body}) {
@@ -171,21 +198,23 @@ class ApiClient {
   }
 
   dynamic _unwrap(http.Response response) {
-    Map<String, dynamic> body = const {};
+    dynamic decoded;
     if (response.body.isNotEmpty) {
       try {
-        final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic>) body = decoded;
+        decoded = jsonDecode(response.body);
       } on FormatException {
         // Falls through to the status-based error below.
       }
     }
+    final Map<String, dynamic> body = decoded is Map<String, dynamic>
+        ? decoded
+        : const <String, dynamic>{};
 
     if (response.statusCode == 401) {
       onUnauthorized?.call();
       throw ApiException(
         _errorMessage(body) ?? 'Your session ended. Please sign in again.',
-        code: _errorCode(body) ?? 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
         statusCode: 401,
       );
     }
@@ -199,15 +228,43 @@ class ApiClient {
         _errorMessage(body) ?? _fallbackMessage(response.statusCode),
         code: _errorCode(body),
         statusCode: response.statusCode,
+        details: _errorDetails(body),
       );
     }
 
-    // A few endpoints answer with a bare `{ success, message }`; those callers
-    // only check for the absence of an exception.
-    return body.containsKey('data') ? body['data'] : body;
+    // 204 and other empty replies carry nothing for the caller to read.
+    if (decoded == null) return null;
+    // Tolerate the old `{ success, data }` envelope so a proxy or older
+    // deployment in front of the API does not break the app.
+    if (body.containsKey('success') && body.containsKey('data')) {
+      return body['data'];
+    }
+    return decoded;
   }
 
+  /// Turns FastAPI's `detail` into one readable sentence.
   String? _errorMessage(Map<String, dynamic> body) {
+    final detail = body['detail'];
+    if (detail is String && detail.isNotEmpty) return detail;
+    if (detail is Map && detail['message'] is String) {
+      return detail['message'] as String;
+    }
+    if (detail is List && detail.isNotEmpty) {
+      final lines = <String>[];
+      for (final entry in detail) {
+        if (entry is! Map) continue;
+        final message = (entry['msg'] ?? '').toString().replaceFirst(
+          'Value error, ',
+          '',
+        );
+        final location = entry['loc'];
+        final field = location is List && location.length > 1
+            ? location.skip(1).join('.')
+            : '';
+        lines.add(field.isEmpty ? message : '$field: $message');
+      }
+      if (lines.isNotEmpty) return lines.join('\n');
+    }
     final error = body['error'];
     if (error is Map && error['message'] is String) {
       return error['message'] as String;
@@ -220,6 +277,11 @@ class ApiClient {
     final error = body['error'];
     if (error is Map && error['code'] is String) return error['code'] as String;
     return null;
+  }
+
+  Map<String, dynamic> _errorDetails(Map<String, dynamic> body) {
+    final detail = body['detail'];
+    return detail is Map<String, dynamic> ? detail : const {};
   }
 
   String _fallbackMessage(int status) {

@@ -17,11 +17,11 @@ void main() {
     final client = MockClient((request) async {
       if (request.method == 'POST') {
         reported = true;
-        expect(request.url.path, '/api/staff/locations');
+        expect(request.url.path, '/staff/locations');
         return http.Response(jsonEncode({'success': true, 'data': {'accepted': 1}}), 200);
       }
       expect(reported, isTrue);
-      expect(request.url.path, '/api/staff/locations/live');
+      expect(request.url.path, '/staff/locations/live');
       return http.Response(jsonEncode({
         'success': true,
         'data': {

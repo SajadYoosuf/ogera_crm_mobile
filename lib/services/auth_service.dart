@@ -73,8 +73,8 @@ class AuthService {
   final SessionStore _store;
 
   /// Signs in and verifies that the authenticated role matches the tab the user
-  /// picked. The server performs the same check; this one keeps the message
-  /// specific even against a backend that has not shipped the scope guard yet.
+  /// picked. The API has no scope guard of its own, so this check is the only
+  /// one, and it runs before the token is stored.
   Future<AuthSession> signIn({
     required String email,
     required String password,
@@ -83,47 +83,41 @@ class AuthService {
     dynamic body;
     try {
       body = await _api.post(
-        '/api/auth/login',
+        '/auth/login',
         body: {'email': email.trim(), 'password': password},
-        headers: {'x-client-scope': scope.id},
       );
     } on ApiException catch (error) {
-      if (error.code == 'SCOPE_MISMATCH') {
-        throw AuthException(scope.mismatchMessage, code: error.code);
-      }
       throw AuthException(error.message, code: error.code);
     }
 
-    final json = asMap(body);
-    final token = json['accessToken'];
-    final user = json['user'];
-    if (token is! String || token.isEmpty || user is! Map<String, dynamic>) {
+    final session = AuthSession.fromLogin(body);
+    if (session == null) {
       throw const AuthException(
         'The server returned an invalid sign-in response.',
       );
     }
-
-    final session = AuthSession(
-      accessToken: token,
-      user: AuthUser.fromJson(user),
-    );
     if (!scope.accepts(session.user.role)) {
       throw AuthException(scope.mismatchMessage, code: 'SCOPE_MISMATCH');
     }
 
     await _store.save(session);
     _api.setAccessToken(session.accessToken);
+    _api.currentUserId = session.user.id;
     return session;
   }
 
   Future<AuthSession?> restore() async {
     final session = await _store.read();
-    if (session != null) _api.setAccessToken(session.accessToken);
+    if (session != null) {
+      _api.setAccessToken(session.accessToken);
+      _api.currentUserId = session.user.id;
+    }
     return session;
   }
 
   Future<void> signOut() async {
     await _store.clear();
     _api.setAccessToken(null);
+    _api.currentUserId = null;
   }
 }

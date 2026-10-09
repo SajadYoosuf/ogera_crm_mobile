@@ -1,7 +1,8 @@
 import '../core/utils/formatters.dart';
 
-/// These three lists mirror the ENUM columns on the `sales` table, so a value
-/// the app offers is always a value the column accepts.
+/// Option lists for the sale form. The API's `sales` register only keeps the
+/// date, buyer, phones, address and purchased product, so the fields below
+/// are kept for the screens that still show them but are never sent.
 class SaleOptions {
   const SaleOptions._();
 
@@ -97,31 +98,17 @@ class Sale {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
+  /// A row of `GET /sales`. The register's purchased product is the closest
+  /// match for the old tank size, so it fills that slot.
   factory Sale.fromJson(Map<String, dynamic> json) {
     return Sale(
       id: asInt(json['id']) ?? 0,
-      saleDate: asText(json['saleDate']) ?? '',
-      buyerName: asText(json['buyerName']) ?? '',
-      buyerPhone: asText(json['buyerPhone']) ?? '',
+      saleDate: asText(json['purchase_date']) ?? '',
+      buyerName: asText(json['name']) ?? '',
+      buyerPhone: asText(json['phone']) ?? '',
       address: asText(json['address']),
-      panchayath: asText(json['panchayath']),
-      ward: asText(json['ward']),
-      tankSize: asText(json['tankSize']),
-      quantity: asInt(json['quantity']),
-      unitPrice: asDouble(json['unitPrice']),
-      totalPrice: asDouble(json['totalPrice']),
-      houseStage: asText(json['houseStage']),
-      currentTank: asText(json['currentTank']),
-      waterSource: asText(json['waterSource']),
-      sourceOfSale: asText(json['sourceOfSale']),
-      engineerName: asText(json['engineerName']),
-      engineerPhone: asText(json['engineerPhone']),
-      plumberName: asText(json['plumberName']),
-      plumberPhone: asText(json['plumberPhone']),
-      contactId: asInt(json['contactId']),
-      enteredBy: asText(json['enteredBy']),
-      remarks: asText(json['remarks']),
-      createdAt: parseDate(json['createdAt']),
+      tankSize: asText(json['purchased_product']),
+      createdAt: parseDate(json['created_at']),
     );
   }
 }
@@ -197,34 +184,20 @@ class SaleDraft {
     );
   }
 
-  Map<String, dynamic> toJson() {
+  /// The `POST /sales` / `PUT /sales/{id}` body.
+  Map<String, dynamic> toApiJson() {
     final json = <String, dynamic>{
-      'saleDate': saleDate,
-      'buyerName': buyerName.trim(),
-      'buyerPhone': buyerPhone.trim(),
+      'purchase_date': saleDate,
+      'name': buyerName.trim(),
     };
-    void put(String key, Object? value) {
-      if (value == null) return;
-      if (value is String && value.trim().isEmpty) return;
-      json[key] = value is String ? value.trim() : value;
+    void put(String key, String? value) {
+      if (value == null || value.trim().isEmpty) return;
+      json[key] = value.trim();
     }
 
+    put('phone', buyerPhone);
     put('address', address);
-    put('panchayath', panchayath);
-    put('ward', ward);
-    put('tankSize', tankSize);
-    put('quantity', quantity);
-    put('unitPrice', unitPrice);
-    put('houseStage', houseStage);
-    put('currentTank', currentTank);
-    put('waterSource', waterSource);
-    put('sourceOfSale', sourceOfSale);
-    put('engineerName', engineerName);
-    put('engineerPhone', engineerPhone);
-    put('plumberName', plumberName);
-    put('plumberPhone', plumberPhone);
-    put('contactId', contactId);
-    put('remarks', remarks);
+    put('purchased_product', tankSize);
     return json;
   }
 }
@@ -248,24 +221,29 @@ class SalePage {
   final int totalTanks;
   final int activePanchayaths;
 
+  /// `GET /sales` pages by `skip`/`limit`. The register has no price or
+  /// quantity columns, so the revenue and tank totals stay at zero.
   factory SalePage.fromJson(Map<String, dynamic> json) {
-    final rows = (json['sales'] as List?) ?? const [];
+    final rows = (json['items'] as List?) ?? const [];
+    final total = asInt(json['total']) ?? 0;
+    final limit = (asInt(json['limit']) ?? 20).clamp(1, 1 << 20);
+    final skip = asInt(json['skip']) ?? 0;
     return SalePage(
       sales: rows
           .whereType<Map<String, dynamic>>()
           .map(Sale.fromJson)
           .toList(growable: false),
-      total: asInt(json['total']) ?? 0,
-      page: asInt(json['page']) ?? 1,
-      totalPages: asInt(json['totalPages']) ?? 1,
-      totalRevenue: asDouble(json['totalRevenue']) ?? 0,
-      totalTanks: asInt(json['totalTanks']) ?? 0,
-      activePanchayaths: asInt(json['activePanchayaths']) ?? 0,
+      total: total,
+      page: skip ~/ limit + 1,
+      totalPages: total == 0 ? 1 : (total + limit - 1) ~/ limit,
+      totalRevenue: 0,
+      totalTanks: 0,
+      activePanchayaths: 0,
     );
   }
 }
 
-/// Read-only catalogue entry from the existing Venting Next products table.
+/// A product name seen in the sales register, offered as a suggestion.
 class ProductOption {
   const ProductOption({
     required this.id,
@@ -279,18 +257,7 @@ class ProductOption {
   final double? price;
   final String? size;
 
-  factory ProductOption.fromJson(Map<String, dynamic> json) {
-    return ProductOption(
-      id: asInt(json['id']) ?? 0,
-      name: asText(json['name']) ?? asText(json['title']) ?? 'Product',
-      price:
-          asDouble(json['priceSale']) ??
-          asDouble(json['price']) ??
-          asDouble(json['unitPrice']),
-      size:
-          asText(json['size']) ??
-          asText(json['tankSize']) ??
-          asText(json['capacity']),
-    );
-  }
+  /// `GET /sales/products` answers with plain product names.
+  factory ProductOption.fromName(String name, int index) =>
+      ProductOption(id: index + 1, name: name);
 }

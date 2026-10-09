@@ -4,20 +4,24 @@
 class CrmOptions {
   const CrmOptions._();
 
-  /// `contacts.source` is a VARCHAR(20); these are the values the web form
-  /// writes.
+  /// Lead source slugs, as the API's `GET /lead-sources` returns them. The
+  /// picker offers these; the id is looked up when the contact is saved.
   static const contactSources = <String>[
+    'meta',
+    'website',
     'showroom',
-    'online',
+    'gmb',
+    'whatsapp',
     'offline',
-    'Meta',
   ];
 
-  static String sourceLabel(String value) => switch (value) {
+  static String sourceLabel(String value) => switch (value.toLowerCase()) {
+    'meta' => 'Meta',
+    'website' || 'online' => 'Website',
     'showroom' => 'Showroom',
-    'online' => 'Online',
+    'gmb' => 'Google My Business',
+    'whatsapp' => 'WhatsApp',
     'offline' => 'Offline',
-    'Meta' => 'Meta',
     _ => value,
   };
 

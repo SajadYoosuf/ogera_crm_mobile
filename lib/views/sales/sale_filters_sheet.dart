@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/reference/crm_options.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/form_fields.dart';
-import '../../models/sale.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/sales_view_model.dart';
 
-/// Ledger filters. Applying them also recomputes the summary totals, because
-/// the API derives revenue and tanks from the same WHERE clause.
+/// Ledger filters: the register can be narrowed by sale date.
 Future<void> showSaleFilters(BuildContext context) {
   final viewModel = context.read<SalesViewModel>();
   return showModalBottomSheet<void>(
@@ -30,29 +27,11 @@ class _SaleFiltersSheet extends StatefulWidget {
 }
 
 class _SaleFiltersSheetState extends State<_SaleFiltersSheet> {
-  late final _wardController = TextEditingController(
-    text: context.read<SalesViewModel>().ward,
-  );
-
-  late String? _panchayath = context.read<SalesViewModel>().panchayath;
-  late String? _waterSource = context.read<SalesViewModel>().waterSource;
-  late String? _sourceOfSale = context.read<SalesViewModel>().sourceOfSale;
   late String? _startDate = context.read<SalesViewModel>().startDate;
   late String? _endDate = context.read<SalesViewModel>().endDate;
 
-  @override
-  void dispose() {
-    _wardController.dispose();
-    super.dispose();
-  }
-
   void _apply() {
-    final ward = _wardController.text.trim();
     context.read<SalesViewModel>().applyFilters(
-      panchayath: _panchayath,
-      ward: ward.isEmpty ? null : ward,
-      waterSource: _waterSource,
-      sourceOfSale: _sourceOfSale,
       startDate: _startDate,
       endDate: _endDate,
     );
@@ -61,12 +40,8 @@ class _SaleFiltersSheetState extends State<_SaleFiltersSheet> {
 
   void _reset() {
     setState(() {
-      _panchayath = null;
-      _waterSource = null;
-      _sourceOfSale = null;
       _startDate = null;
       _endDate = null;
-      _wardController.clear();
     });
   }
 
@@ -96,74 +71,6 @@ class _SaleFiltersSheetState extends State<_SaleFiltersSheet> {
               ],
             ),
             const SizedBox(height: 14),
-            OgeraPickerField(
-              label: 'Panchayath',
-              icon: Icons.location_city_outlined,
-              value: _panchayath,
-              placeholder: 'Any panchayath',
-              onClear: () => setState(() => _panchayath = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Panchayath',
-                  options: CrmOptions.panchayaths,
-                  labelOf: (value) => value,
-                  selected: _panchayath,
-                  searchHint: 'Search panchayath',
-                );
-                if (picked != null) setState(() => _panchayath = picked);
-              },
-            ),
-            OgeraTextField(
-              label: 'Ward',
-              controller: _wardController,
-              icon: Icons.numbers_rounded,
-              maxLength: 100,
-            ),
-            OgeraPickerField(
-              label: 'Water source',
-              icon: Icons.water_rounded,
-              value: _waterSource == null
-                  ? null
-                  : SaleOptions.label(SaleOptions.waterSources, _waterSource),
-              placeholder: 'Any water source',
-              onClear: () => setState(() => _waterSource = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Water source',
-                  options: SaleOptions.waterSources.keys.toList(
-                    growable: false,
-                  ),
-                  labelOf: (key) => SaleOptions.waterSources[key] ?? key,
-                  selected: _waterSource,
-                  searchable: false,
-                );
-                if (picked != null) setState(() => _waterSource = picked);
-              },
-            ),
-            OgeraPickerField(
-              label: 'Source of sale',
-              icon: Icons.input_rounded,
-              value: _sourceOfSale == null
-                  ? null
-                  : SaleOptions.label(SaleOptions.sourcesOfSale, _sourceOfSale),
-              placeholder: 'Any source',
-              onClear: () => setState(() => _sourceOfSale = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Source of sale',
-                  options: SaleOptions.sourcesOfSale.keys.toList(
-                    growable: false,
-                  ),
-                  labelOf: (key) => SaleOptions.sourcesOfSale[key] ?? key,
-                  selected: _sourceOfSale,
-                  searchable: false,
-                );
-                if (picked != null) setState(() => _sourceOfSale = picked);
-              },
-            ),
             Row(
               children: [
                 Expanded(

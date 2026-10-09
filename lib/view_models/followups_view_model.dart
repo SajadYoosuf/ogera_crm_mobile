@@ -30,7 +30,9 @@ class FollowupsViewModel extends ChangeNotifier {
   String get query => _query;
   String? get assigneeFilter => _assigneeFilter;
   bool get canAssign => _user.isHead;
-  bool get canManageStages => _user.isHead;
+
+  /// The API fixes the pipeline stages, so there is nothing to manage.
+  bool get canManageStages => false;
   bool get canFilterByAssignee => _user.isHead;
 
   /// Everyone can see the full follow-up pipeline. Staff-only restrictions are

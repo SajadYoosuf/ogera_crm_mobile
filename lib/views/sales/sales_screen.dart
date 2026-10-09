@@ -99,7 +99,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             child: OgeraSearchField(
               controller: _searchController,
-              hint: 'Search buyer, phone, or panchayath',
+              hint: 'Search buyer, phone, address, or product',
               onChanged: viewModel.search,
             ),
           ),
@@ -112,8 +112,8 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 }
 
-/// Revenue, tanks, and reach — recomputed by the API against whatever filters
-/// are active, so the numbers always describe what is on screen.
+/// How many sales match the search and filters. The register keeps no price
+/// or quantity, so the old revenue and tank totals are gone with them.
 class _SummaryBar extends StatelessWidget {
   const _SummaryBar({required this.viewModel});
 
@@ -128,24 +128,10 @@ class _SummaryBar extends StatelessWidget {
         child: Row(
           children: [
             _Metric(
-              label: 'Revenue',
-              value: formatCompactCurrency(viewModel.totalRevenue),
-              icon: Icons.payments_outlined,
-              color: OgeraColors.success,
-            ),
-            Container(width: 1, height: 32, color: OgeraColors.line),
-            _Metric(
-              label: 'Tanks',
-              value: '${viewModel.totalTanks}',
-              icon: Icons.water_drop_outlined,
+              label: viewModel.hasFilters ? 'Matching sales' : 'Total sales',
+              value: '${viewModel.total}',
+              icon: Icons.receipt_long_outlined,
               color: OgeraColors.blue,
-            ),
-            Container(width: 1, height: 32, color: OgeraColors.line),
-            _Metric(
-              label: 'Panchayaths',
-              value: '${viewModel.activePanchayaths}',
-              icon: Icons.location_city_outlined,
-              color: OgeraColors.warning,
             ),
           ],
         ),

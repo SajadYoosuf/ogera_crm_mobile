@@ -7,7 +7,8 @@ import '../models/sale.dart';
 import '../services/crm_services.dart';
 
 /// Head-only. The Sales Ledger tab is not built for a staff session at all, so
-/// this view model is never constructed for one.
+/// this view model is never constructed for one. The register only filters by
+/// search text and sale date.
 class SalesViewModel extends ChangeNotifier {
   SalesViewModel(this._service);
 
@@ -24,18 +25,11 @@ class SalesViewModel extends ChangeNotifier {
   bool _isLoadingMore = false;
   String? _error;
   String _query = '';
-  String? _panchayath;
-  String? _ward;
-  String? _waterSource;
-  String? _sourceOfSale;
   String? _startDate;
   String? _endDate;
   int _page = 1;
   int _totalPages = 1;
   int _total = 0;
-  double _totalRevenue = 0;
-  int _totalTanks = 0;
-  int _activePanchayaths = 0;
 
   List<Sale> get sales => List.unmodifiable(_sales);
   bool get isLoading => _isLoading;
@@ -43,24 +37,11 @@ class SalesViewModel extends ChangeNotifier {
   bool get hasMore => _page < _totalPages;
   String? get error => _error;
   String get query => _query;
-  String? get panchayath => _panchayath;
-  String? get ward => _ward;
-  String? get waterSource => _waterSource;
-  String? get sourceOfSale => _sourceOfSale;
   String? get startDate => _startDate;
   String? get endDate => _endDate;
   int get total => _total;
-  double get totalRevenue => _totalRevenue;
-  int get totalTanks => _totalTanks;
-  int get activePanchayaths => _activePanchayaths;
 
-  bool get hasFilters =>
-      _panchayath != null ||
-      _ward != null ||
-      _waterSource != null ||
-      _sourceOfSale != null ||
-      _startDate != null ||
-      _endDate != null;
+  bool get hasFilters => _startDate != null || _endDate != null;
 
   Future<void> load({bool silent = false}) async {
     if (!silent) {
@@ -86,28 +67,13 @@ class SalesViewModel extends ChangeNotifier {
     _debounceTimer = Timer(_debounce, load);
   }
 
-  void applyFilters({
-    String? panchayath,
-    String? ward,
-    String? waterSource,
-    String? sourceOfSale,
-    String? startDate,
-    String? endDate,
-  }) {
-    _panchayath = panchayath;
-    _ward = ward;
-    _waterSource = waterSource;
-    _sourceOfSale = sourceOfSale;
+  void applyFilters({String? startDate, String? endDate}) {
     _startDate = startDate;
     _endDate = endDate;
     load();
   }
 
   void clearFilters() {
-    _panchayath = null;
-    _ward = null;
-    _waterSource = null;
-    _sourceOfSale = null;
     _startDate = null;
     _endDate = null;
     load();
@@ -118,10 +84,6 @@ class SalesViewModel extends ChangeNotifier {
     try {
       final result = await _service.list(
         query: _query.isEmpty ? null : _query,
-        panchayath: _panchayath,
-        ward: _ward,
-        waterSource: _waterSource,
-        sourceOfSale: _sourceOfSale,
         startDate: _startDate,
         endDate: _endDate,
         page: page,
@@ -138,9 +100,6 @@ class SalesViewModel extends ChangeNotifier {
       _page = result.page;
       _totalPages = result.totalPages;
       _total = result.total;
-      _totalRevenue = result.totalRevenue;
-      _totalTanks = result.totalTanks;
-      _activePanchayaths = result.activePanchayaths;
       _error = null;
     } on ApiException catch (error) {
       if (sequence != _sequence) return;

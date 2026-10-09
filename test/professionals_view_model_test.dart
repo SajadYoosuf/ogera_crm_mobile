@@ -34,18 +34,21 @@ void main() {
       expect(viewModel.countFor(ProfessionalType.plumber), 1);
     });
 
-    test('passes selected type and trimmed search query to the service', () async {
-      final service = _FakeProfessionalsService();
-      final viewModel = ProfessionalsViewModel(service);
+    test(
+      'passes selected type and trimmed search query to the service',
+      () async {
+        final service = _FakeProfessionalsService();
+        final viewModel = ProfessionalsViewModel(service);
 
-      viewModel.selectType(ProfessionalType.contractor);
-      await _flushMicrotasks();
-      viewModel.search('  kochi  ');
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+        viewModel.selectType(ProfessionalType.contractor);
+        await _flushMicrotasks();
+        viewModel.search('  kochi  ');
+        await Future<void>.delayed(const Duration(milliseconds: 400));
 
-      expect(service.lastType, ProfessionalType.contractor);
-      expect(service.lastQuery, 'kochi');
-    });
+        expect(service.lastType, ProfessionalType.contractor);
+        expect(service.lastQuery, 'kochi');
+      },
+    );
 
     test('sorts the loaded list by name without another fetch', () async {
       final service = _FakeProfessionalsService(
@@ -97,7 +100,9 @@ void main() {
       viewModel.upsert(_professional(id: 2, name: 'Beena'));
       viewModel.removeById(1);
 
-      expect(viewModel.professionals.map((item) => item.displayName), ['Beena']);
+      expect(viewModel.professionals.map((item) => item.displayName), [
+        'Beena',
+      ]);
     });
   });
 
@@ -116,41 +121,62 @@ void main() {
       viewModel.draft
         ..name = 'Maya'
         ..phone = ' 9876543210 '
+        ..district = 'Kozhikode'
+        ..address = 'Beach Road'
         ..type = ProfessionalType.interiorDesigner;
 
       final saved = await viewModel.save();
 
       expect(saved?.displayName, 'Maya');
-      expect(service.createdDraft?.toJson(), {
+      // A partner contact: the profession travels as the API's value.
+      expect(service.createdDraft?.toApiJson(), {
+        'contact_type': 'partner',
         'phone': '9876543210',
-        'type': 'Interior Designer',
         'name': 'Maya',
+        'address': 'Beach Road',
+        'district': 'Kozhikode',
+        'partner_profile': {'profession_type': 'interior_designer'},
       });
       expect(viewModel.isSaving, isFalse);
       expect(viewModel.error, isNull);
     });
 
-    test('shows a duplicate-phone message from the API', () async {
+    test(
+      'asks for a district and an address before calling the server',
+      () async {
+        final service = _FakeProfessionalsService();
+        final viewModel = ProfessionalFormViewModel(service);
+        viewModel.draft.phone = '9876543210';
+
+        expect(await viewModel.save(), isNull);
+        expect(viewModel.error, 'Select the district.');
+
+        viewModel.draft.district = 'Kozhikode';
+        expect(await viewModel.save(), isNull);
+        expect(viewModel.error, 'Enter the address.');
+        expect(service.createdDraft, isNull);
+      },
+    );
+
+    test('shows the server message when the save is rejected', () async {
       final viewModel = ProfessionalFormViewModel(
         _FakeProfessionalsService(
           saveError: const ApiException(
-            'Duplicate professional.',
-            code: 'DUPLICATE',
-            statusCode: 409,
+            'Partner type is not valid.',
+            statusCode: 422,
           ),
         ),
       );
       viewModel.draft
         ..phone = '9876543210'
+        ..district = 'Kozhikode'
+        ..address = 'Beach Road'
         ..type = ProfessionalType.engineer;
 
       final saved = await viewModel.save();
 
       expect(saved, isNull);
-      expect(
-        viewModel.error,
-        'A engineer with this phone number already exists.',
-      );
+      expect(viewModel.error, 'Partner type is not valid.');
       expect(viewModel.isSaving, isFalse);
     });
   });
@@ -180,8 +206,8 @@ class _FakeProfessionalsService extends ProfessionalsService {
     List<Professional> professionals = const [],
     this.error,
     this.saveError,
-  })  : _professionals = professionals,
-        super(_UnusedApiClient());
+  }) : _professionals = professionals,
+       super(_UnusedApiClient());
 
   final List<Professional> _professionals;
   ApiException? error;

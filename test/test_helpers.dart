@@ -16,14 +16,14 @@ import 'package:ogera_crm_mobile/services/location_queue.dart';
 /// An [ApiClient] whose [MockClient] answers by request path, ignoring the
 /// bearer token and headers. [routes] maps a path to a function of the full
 /// request URI (so a handler can branch on query parameters) returning the
-/// envelope's `data` payload; a path with no handler answers with `null`.
+/// JSON body, the way FastAPI answers; a path with no handler answers `null`.
 ApiClient fakeApiClient(Map<String, dynamic Function(Uri uri)> routes) {
   return ApiClient(
     baseUrl: 'https://crm.test',
     client: MockClient((request) async {
       final handler = routes[request.url.path];
       final data = handler?.call(request.url);
-      return http.Response(jsonEncode({'success': true, 'data': data}), 200);
+      return http.Response(jsonEncode(data), 200);
     }),
   );
 }
@@ -108,24 +108,51 @@ class _FailingHttpClient implements HttpClient {
 
 // ------------------------------------------------------------------ builders
 
+/// `{ items, total, skip, limit }`, the envelope of every paged list.
+Map<String, dynamic> pageOf(
+  List<Map<String, dynamic>> items, {
+  int? total,
+  int skip = 0,
+  int limit = 20,
+}) => {
+  'items': items,
+  'total': total ?? items.length,
+  'skip': skip,
+  'limit': limit,
+};
+
+/// A `GET /contacts` row. `type` is the mobile kind: `lead` or `awareness`
+/// (both are API consumers, told apart by `awareness_mode`).
 Map<String, dynamic> contactJson({
   required int id,
   String? name,
   String phone = '9876543210',
   String type = 'lead',
-  String? panchayath,
   String? district,
-  String createdAt = '2026-01-01T00:00:00.000Z',
+  String? stage,
+  int? createdBy,
+  int assignedTo = 3,
+  String createdAt = '2026-01-01T00:00:00',
 }) => {
   'id': id,
+  'contact_type': 'consumer',
+  'name': name ?? 'Contact $id',
   'phone': phone,
-  'name': name,
-  'contactType': type,
-  'panchayath': panchayath,
-  'district': district,
-  'createdAt': createdAt,
+  'district': district ?? 'Calicut',
+  'awareness_mode': type == 'awareness' ? 1 : 0,
+  'lead_stage': stage == null
+      ? null
+      : {'stage': stage, 'changed_at': createdAt},
+  'assigned_to': {'id': assignedTo, 'name': 'Staff $assignedTo'},
+  'created_by': createdBy == null
+      ? null
+      : {'id': createdBy, 'name': 'Staff $createdBy'},
+  'created_at': createdAt,
+  'is_verified': true,
+  'missing_fields': <String>[],
 };
 
+/// A `GET /contacts/map` row.
 Map<String, dynamic> contactPinJson({
   required int id,
   double latitude = 11.25,
@@ -137,10 +164,12 @@ Map<String, dynamic> contactPinJson({
   'phone': '9876543210',
   'latitude': latitude,
   'longitude': longitude,
-  'contactType': type,
-  'name': name,
+  'contact_type': 'consumer',
+  'awareness_mode': type == 'awareness' ? 1 : 0,
+  'name': name ?? 'Contact $id',
 };
 
+/// A partner `GET /contacts` row. `type` accepts the display name.
 Map<String, dynamic> professionalJson({
   required int id,
   String? name,
@@ -148,40 +177,65 @@ Map<String, dynamic> professionalJson({
   String type = 'Plumber',
   double? latitude,
   double? longitude,
-  String createdAt = '2026-01-01T00:00:00.000Z',
+  String createdAt = '2026-01-01T00:00:00',
 }) => {
   'id': id,
+  'contact_type': 'partner',
+  'name': name ?? 'Partner $id',
   'phone': phone,
-  'name': name,
-  'type': type,
-  'latitude': latitude?.toString(),
-  'longitude': longitude?.toString(),
-  'createdAt': createdAt,
+  'profession_type': type.toLowerCase().replaceAll(' ', '_'),
+  'work_area': null,
+  'district': 'Calicut',
+  'latitude': latitude,
+  'longitude': longitude,
+  'created_at': createdAt,
 };
 
+/// A consumer row on the follow-up board; same shape as [contactJson].
 Map<String, dynamic> leadJson({
   required int id,
   String? name,
   String phone = '9876543212',
   String? stage,
-  String? followupDueDate,
-  String? panchayath,
-  String createdAt = '2026-01-01T00:00:00.000Z',
+  int assignedTo = 3,
+  List<String> missingFields = const [],
+  String createdAt = '2026-01-01T00:00:00',
+}) => {
+  ...contactJson(
+    id: id,
+    name: name,
+    phone: phone,
+    stage: stage,
+    assignedTo: assignedTo,
+    createdAt: createdAt,
+  ),
+  'is_verified': missingFields.isEmpty,
+  'missing_fields': missingFields,
+};
+
+/// An open follow-up as `GET /tasks` returns it.
+Map<String, dynamic> taskJson({
+  required int id,
+  required int contactId,
+  required String scheduledDate,
+  int assignedTo = 3,
 }) => {
   'id': id,
-  'phone': phone,
-  'name': name,
-  'stage': stage,
-  'followupDueDate': followupDueDate,
-  'panchayath': panchayath,
-  'createdAt': createdAt,
+  'contact_id': contactId,
+  'contact_name': 'Contact $contactId',
+  'contact_phone': '9876543212',
+  'contact_type': 'consumer',
+  'type': 'phone_call',
+  'status': 'pending',
+  'scheduled_date': scheduledDate,
+  'assigned_to': assignedTo,
 };
 
 Map<String, dynamic> stageJson({
   required String id,
   required String label,
   required int orderIndex,
-}) => {'id': id, 'label': label, 'orderIndex': orderIndex};
+}) => {'id': id, 'label': label, 'order_index': orderIndex};
 
 Map<String, dynamic> staffLocationJson({
   required int userId,

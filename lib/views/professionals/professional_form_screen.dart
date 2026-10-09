@@ -102,103 +102,99 @@ class _ProfessionalFormViewState extends State<_ProfessionalFormView> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        // A Column, not a lazy ListView: every field must exist for the
+        // form's validators to run, including the ones below the fold.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
             OgeraSpacing.screen,
             OgeraSpacing.screen,
             OgeraSpacing.screen,
             120,
           ),
-          children: [
-            const SectionHeader(
-              title: 'Profession',
-              icon: Icons.handyman_outlined,
-            ),
-            _TypeSelector(selected: draft.type, onChanged: viewModel.setType),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SectionHeader(
+                title: 'Profession',
+                icon: Icons.handyman_outlined,
+              ),
+              _TypeSelector(selected: draft.type, onChanged: viewModel.setType),
 
-            const SectionHeader(
-              title: 'Who',
-              icon: Icons.person_outline_rounded,
-            ),
-            OgeraTextField(
-              label: 'Name',
-              controller: _nameController,
-              icon: Icons.badge_outlined,
-              maxLength: 150,
-            ),
-            OgeraTextField(
-              label: 'Phone',
-              controller: _phoneController,
-              icon: Icons.call_outlined,
-              keyboardType: TextInputType.phone,
-              required: true,
-              maxLength: 20,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
-              ],
-              validator: viewModel.validatePhone,
-            ),
+              const SectionHeader(
+                title: 'Who',
+                icon: Icons.person_outline_rounded,
+              ),
+              OgeraTextField(
+                label: 'Name',
+                controller: _nameController,
+                icon: Icons.badge_outlined,
+                maxLength: 150,
+              ),
+              OgeraTextField(
+                label: 'Phone',
+                controller: _phoneController,
+                icon: Icons.call_outlined,
+                keyboardType: TextInputType.phone,
+                required: true,
+                maxLength: 20,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
+                ],
+                validator: viewModel.validatePhone,
+              ),
 
-            const SectionHeader(title: 'Where', icon: Icons.place_outlined),
-            LocationCaptureField(
-              latitude: draft.latitude,
-              longitude: draft.longitude,
-              address: draft.address,
-              onChanged: (latitude, longitude, address) {
-                viewModel.setLocation(latitude: latitude, longitude: longitude);
-                if (address != null && _addressController.text.trim().isEmpty) {
-                  _addressController.text = address;
-                }
-              },
-            ),
-            OgeraTextField(
-              label: 'Place',
-              controller: _placeController,
-              icon: Icons.storefront_outlined,
-              hint: 'Town or locality they work from',
-              maxLength: 100,
-            ),
-            OgeraTextField(
-              label: 'Address',
-              controller: _addressController,
-              icon: Icons.home_outlined,
-              maxLines: 2,
-              maxLength: 255,
-            ),
-            OgeraPickerField(
-              label: 'District',
-              icon: Icons.map_outlined,
-              value: draft.district,
-              onClear: () => setState(() => draft.district = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'District',
-                  options: CrmOptions.districts,
-                  labelOf: (value) => value,
-                  selected: draft.district,
-                );
-                if (picked != null) setState(() => draft.district = picked);
-              },
-            ),
-            OgeraPickerField(
-              label: 'Panchayath',
-              icon: Icons.location_city_outlined,
-              value: draft.panchayath,
-              onClear: () => setState(() => draft.panchayath = null),
-              onTap: () async {
-                final picked = await showOptionPicker<String>(
-                  context,
-                  title: 'Panchayath',
-                  options: CrmOptions.panchayaths,
-                  labelOf: (value) => value,
-                  selected: draft.panchayath,
-                  searchHint: 'Search panchayath',
-                );
-                if (picked != null) setState(() => draft.panchayath = picked);
-              },
-            ),
-          ],
+              const SectionHeader(title: 'Where', icon: Icons.place_outlined),
+              LocationCaptureField(
+                latitude: draft.latitude,
+                longitude: draft.longitude,
+                address: draft.address,
+                onChanged: (latitude, longitude, address) {
+                  viewModel.setLocation(
+                    latitude: latitude,
+                    longitude: longitude,
+                  );
+                  if (address != null &&
+                      _addressController.text.trim().isEmpty) {
+                    _addressController.text = address;
+                  }
+                },
+              ),
+              OgeraTextField(
+                label: 'Place',
+                controller: _placeController,
+                icon: Icons.storefront_outlined,
+                hint: 'Town or locality they work from',
+                maxLength: 100,
+              ),
+              OgeraTextField(
+                label: 'Address',
+                controller: _addressController,
+                icon: Icons.home_outlined,
+                required: true,
+                maxLines: 2,
+                maxLength: 255,
+                validator: (value) =>
+                    (value ?? '').trim().isEmpty ? 'Enter the address.' : null,
+              ),
+              OgeraPickerField(
+                label: 'District',
+                icon: Icons.map_outlined,
+                required: true,
+                value: draft.district,
+                onClear: () => setState(() => draft.district = null),
+                onTap: () async {
+                  final picked = await showOptionPicker<String>(
+                    context,
+                    title: 'District',
+                    options: CrmOptions.districts,
+                    labelOf: (value) => value,
+                    selected: draft.district,
+                  );
+                  if (picked != null) setState(() => draft.district = picked);
+                },
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: Container(
