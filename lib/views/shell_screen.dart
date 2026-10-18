@@ -3,27 +3,22 @@ import 'package:provider/provider.dart';
 
 import '../models/auth_session.dart';
 import '../services/crm_services.dart';
-import '../services/location_api_service.dart';
 import '../theme/ogera_colors.dart';
 import '../view_models/contacts_view_model.dart';
 import '../view_models/followups_view_model.dart';
-import '../view_models/map_view_model.dart';
 import '../view_models/professionals_view_model.dart';
-import '../view_models/sales_view_model.dart';
 import '../view_models/session_view_model.dart';
 import 'contacts/contact_form_screen.dart';
 import 'contacts/contacts_tab.dart';
 import 'followups/followups_tab.dart';
 import 'home/home_tab.dart';
-import 'map/map_tab.dart';
 import 'more/more_tab.dart';
 import 'professionals/professional_form_screen.dart';
 import 'professionals/professionals_tab.dart';
-import 'sales/sale_form_screen.dart';
 import 'shell_scope.dart';
 
 /// Bottom navigation, fixed order: Home · Contacts · Professionals ·
-/// Follow-ups · Map · More.
+/// Home · Contacts · Pros · Follow-ups · More.
 ///
 /// The tabs are identical for both roles; what changes is what each one shows.
 /// Module view models are provided here rather than per screen so a tab keeps
@@ -62,20 +57,6 @@ class _ShellScreenState extends State<ShellScreen> {
             user,
           ),
         ),
-        ChangeNotifierProvider(
-          create: (context) => MapViewModel(
-            contacts: context.read<ContactsService>(),
-            professionals: context.read<ProfessionalsService>(),
-            locations: context.read<LocationApiService>(),
-            canViewStaff: user.isHead,
-          ),
-        ),
-        // The Sales Ledger is Head-only, so a staff session never builds it.
-        if (user.isHead)
-          ChangeNotifierProvider(
-            create: (context) =>
-                SalesViewModel(context.read<SalesService>()),
-          ),
       ],
       child: Builder(
         builder: (context) => Scaffold(
@@ -87,7 +68,6 @@ class _ShellScreenState extends State<ShellScreen> {
               onActivate: () {
                 context.read<ContactsViewModel>().load();
                 context.read<FollowupsViewModel>().load();
-                if (user.isHead) context.read<SalesViewModel>().load();
               },
               child: const HomeTab(),
             ),
@@ -105,11 +85,6 @@ class _ShellScreenState extends State<ShellScreen> {
               active: _index == 3,
               onActivate: () => context.read<FollowupsViewModel>().load(),
               child: const FollowupsTab(),
-            ),
-            _LazyTab(
-              active: _index == 4,
-              onActivate: () => context.read<MapViewModel>().load(),
-              child: const MapTab(),
             ),
             const MoreTab(),
           ],
@@ -226,11 +201,6 @@ class _NavBar extends StatelessWidget {
             label: 'Follow-ups',
           ),
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map_rounded),
-            label: 'Map',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.more_horiz_rounded),
             selectedIcon: Icon(Icons.more_horiz_rounded),
             label: 'More',
@@ -241,8 +211,7 @@ class _NavBar extends StatelessWidget {
   }
 }
 
-/// Expandable quick action: Add Contact and Add Professional for everyone,
-/// plus Add Sale for Admin and Sales Head.
+/// Expandable quick action: Add Contact and Add Professional for everyone.
 class QuickActionFab extends StatefulWidget {
   const QuickActionFab({super.key, required this.user});
 
@@ -286,22 +255,15 @@ class _QuickActionFabState extends State<QuickActionFab>
         _action(
           label: 'Add contact',
           icon: Icons.person_add_alt_1_rounded,
-          order: widget.user.isHead ? 3 : 2,
+          order: 2,
           onTap: () => _run(() => openContactForm(context)),
         ),
         _action(
           label: 'Add professional',
           icon: Icons.handyman_rounded,
-          order: widget.user.isHead ? 2 : 1,
+          order: 1,
           onTap: () => _run(() => openProfessionalForm(context)),
         ),
-        if (widget.user.isHead)
-          _action(
-            label: 'Add sale',
-            icon: Icons.receipt_long_rounded,
-            order: 1,
-            onTap: () => _run(() => openSaleForm(context)),
-          ),
         const SizedBox(width: 8),
         FloatingActionButton(
           onPressed: _toggle,
@@ -436,13 +398,4 @@ Future<void> openProfessionalForm(BuildContext context) async {
     (_) => const ProfessionalFormScreen(),
   );
   if (created != null) professionals.refresh();
-}
-
-Future<void> openSaleForm(BuildContext context) async {
-  final sales = context.read<SalesViewModel>();
-  final created = await pushShellRoute<dynamic>(
-    context,
-    (_) => const SaleFormScreen(),
-  );
-  if (created != null) sales.refresh();
 }

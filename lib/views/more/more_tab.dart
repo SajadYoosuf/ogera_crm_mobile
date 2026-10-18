@@ -4,17 +4,14 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/session_view_model.dart';
-import '../performance/performance_screen.dart';
-import '../sales/sales_screen.dart';
-import 'my_route_screen.dart';
 import 'profile_screen.dart';
 import 'staff_directory_screen.dart';
 import '../shell_scope.dart';
 
 /// Everything that does not earn a permanent tab.
 ///
-/// The Sales Ledger and the Staff Directory are Head-only and are simply absent
-/// for a staff session — not greyed out.
+/// The Staff Directory is Head-only and is simply absent for a staff session —
+/// not greyed out.
 class MoreTab extends StatelessWidget {
   const MoreTab({super.key});
 
@@ -51,24 +48,6 @@ class MoreTab extends StatelessWidget {
             _MenuGroup(
               items: [
                 _MenuItem(
-                  icon: Icons.receipt_long_rounded,
-                  color: OgeraColors.success,
-                  label: 'Sales Ledger',
-                  caption: 'Record and review completed sales',
-                  onTap: () =>
-                      pushShellRoute<void>(context, (_) => const SalesScreen()),
-                ),
-                _MenuItem(
-                  icon: Icons.insights_rounded,
-                  color: OgeraColors.warning,
-                  label: 'Performance',
-                  caption: 'Leads and awareness added by each staff member',
-                  onTap: () => pushShellRoute<void>(
-                    context,
-                    (_) => const PerformanceScreen(),
-                  ),
-                ),
-                _MenuItem(
                   icon: Icons.badge_outlined,
                   color: OgeraColors.blue,
                   label: 'Staff directory',
@@ -76,36 +55,6 @@ class MoreTab extends StatelessWidget {
                   onTap: () => pushShellRoute<void>(
                     context,
                     (_) => const StaffDirectoryScreen(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-          ],
-
-          if (user.isStaff) ...[
-            const SectionHeader(
-              title: 'My activity',
-              icon: Icons.route_outlined,
-            ),
-            _MenuGroup(
-              items: [
-                _MenuItem(
-                  icon: Icons.timeline_rounded,
-                  color: OgeraColors.warning,
-                  label: 'My route today',
-                  caption: 'The path and distance recorded for you',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const MyRouteScreen()),
-                  ),
-                ),
-                _MenuItem(
-                  icon: Icons.insights_rounded,
-                  color: OgeraColors.blue,
-                  label: 'My performance',
-                  caption: 'Leads and awareness you have added',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PerformanceScreen()),
                   ),
                 ),
               ],
@@ -123,7 +72,7 @@ class MoreTab extends StatelessWidget {
                 icon: Icons.manage_accounts_outlined,
                 color: OgeraColors.info,
                 label: 'Profile and settings',
-                caption: 'Your details, location state, and app version',
+                caption: 'Your details and app version',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ProfileScreen()),
                 ),
@@ -132,9 +81,7 @@ class MoreTab extends StatelessWidget {
                 icon: Icons.logout_rounded,
                 color: OgeraColors.danger,
                 label: 'Sign out',
-                caption: user.isStaff
-                    ? 'Stops location sharing immediately'
-                    : 'End this session on this device',
+                caption: 'End this session on this device',
                 onTap: () => _signOut(context),
               ),
             ],
@@ -150,10 +97,7 @@ Future<void> _signOut(BuildContext context) async {
   final confirmed = await confirmAction(
     context,
     title: 'Sign out?',
-    message: session.isStaff
-        ? 'Location sharing stops as soon as you sign out, and anything still '
-              'queued is discarded.'
-        : 'You will need to sign in again on this device.',
+    message: 'You will need to sign in again on this device.',
     confirmLabel: 'Sign out',
   );
   if (!confirmed) return;
