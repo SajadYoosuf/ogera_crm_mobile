@@ -9,8 +9,6 @@ import 'package:ogera_crm_mobile/core/widgets/form_fields.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 import 'package:ogera_crm_mobile/services/geocoding_service.dart';
-import 'package:ogera_crm_mobile/services/location_api_service.dart';
-import 'package:ogera_crm_mobile/services/location_tracking_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/contacts/contact_form_screen.dart';
@@ -52,10 +50,6 @@ void main() {
     final session = SessionViewModel(
       auth: FakeAuthService(),
       api: api,
-      tracking: LocationTrackingService(
-        LocationApiService(api),
-        NoopLocationQueue(),
-      ),
     );
     await session.adopt(
       const AuthSession(
@@ -135,10 +129,6 @@ void main() {
     final session = SessionViewModel(
       auth: FakeAuthService(),
       api: api,
-      tracking: LocationTrackingService(
-        LocationApiService(api),
-        NoopLocationQueue(),
-      ),
     );
     await session.adopt(
       const AuthSession(
@@ -202,10 +192,6 @@ void main() {
     final session = SessionViewModel(
       auth: FakeAuthService(),
       api: api,
-      tracking: LocationTrackingService(
-        LocationApiService(api),
-        NoopLocationQueue(),
-      ),
     );
     await tester.pumpWidget(
       MultiProvider(

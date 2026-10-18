@@ -4,18 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/network/api_client.dart';
-import '../../core/utils/formatters.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/contact.dart';
 import '../../models/professional.dart';
-import '../../models/sale.dart';
 import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 
-/// The three referral paths a contact can be created from.
+/// The two referral paths a contact can be created from.
 enum ReferralSource {
-  sale('Existing sale', Icons.receipt_long_rounded),
   contact('Existing contact', Icons.person_rounded),
   professional('Professional', Icons.handyman_rounded);
 
@@ -25,51 +22,37 @@ enum ReferralSource {
   final IconData icon;
 }
 
-/// What the picker hands back. Only one of the three is ever populated, because
+/// What the picker hands back. Only one of the two is ever populated, because
 /// the paths are mutually exclusive.
 class ReferralChoice {
-  const ReferralChoice.sale(this.sale)
-    : contact = null,
-      professional = null,
-      source = ReferralSource.sale;
   const ReferralChoice.contact(this.contact)
-    : sale = null,
-      professional = null,
+    : professional = null,
       source = ReferralSource.contact;
   const ReferralChoice.professional(this.professional)
-    : sale = null,
-      contact = null,
+    : contact = null,
       source = ReferralSource.professional;
 
   final ReferralSource source;
-  final Sale? sale;
   final Contact? contact;
   final Professional? professional;
 
   String get label => switch (source) {
-    ReferralSource.sale => 'Sale · ${sale!.buyerName} (${sale!.buyerPhone})',
     ReferralSource.contact => 'Contact · ${contact!.displayName}',
     ReferralSource.professional =>
       '${professional!.type.label} · ${professional!.displayName}',
   };
 }
 
-Future<ReferralChoice?> showReferralPicker(
-  BuildContext context, {
-  required bool canSearchSales,
-}) {
+Future<ReferralChoice?> showReferralPicker(BuildContext context) {
   return showModalBottomSheet<ReferralChoice>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _ReferralPickerSheet(canSearchSales: canSearchSales),
+    builder: (_) => const _ReferralPickerSheet(),
   );
 }
 
 class _ReferralPickerSheet extends StatefulWidget {
-  const _ReferralPickerSheet({required this.canSearchSales});
-
-  /// Sales search is Head-only; a staff session sees just the other two paths.
-  final bool canSearchSales;
+  const _ReferralPickerSheet();
 
   @override
   State<_ReferralPickerSheet> createState() => _ReferralPickerSheetState();
@@ -78,20 +61,15 @@ class _ReferralPickerSheet extends StatefulWidget {
 class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
   final _controller = TextEditingController();
 
-  late ReferralSource _source = widget.canSearchSales
-      ? ReferralSource.sale
-      : ReferralSource.contact;
+  ReferralSource _source = ReferralSource.contact;
 
   Timer? _debounce;
   bool _isLoading = false;
   String? _error;
-  List<Sale> _sales = const [];
   List<Contact> _contacts = const [];
   List<Professional> _professionals = const [];
 
-  List<ReferralSource> get _sources => widget.canSearchSales
-      ? ReferralSource.values
-      : const [ReferralSource.contact, ReferralSource.professional];
+  List<ReferralSource> get _sources => ReferralSource.values;
 
   @override
   void initState() {
@@ -121,8 +99,6 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
     });
     try {
       switch (_source) {
-        case ReferralSource.sale:
-          _sales = await context.read<SalesService>().search(query);
         case ReferralSource.contact:
           _contacts = await context.read<ContactsService>().search(query);
         case ReferralSource.professional:
@@ -181,7 +157,6 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
             child: OgeraSearchField(
               controller: _controller,
               hint: switch (_source) {
-                ReferralSource.sale => 'Search buyer name, phone, or sale ID',
                 ReferralSource.contact => 'Search contact name or phone',
                 ReferralSource.professional => 'Search name, phone, or place',
               },
@@ -204,23 +179,6 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
     }
 
     final tiles = switch (_source) {
-      ReferralSource.sale =>
-        _sales
-            .map(
-              (sale) => _tile(
-                title: sale.buyerName,
-                subtitle: [
-                  sale.buyerPhone,
-                  if (sale.saleDate.isNotEmpty)
-                    formatFullDate(DateTime.parse(sale.saleDate)),
-                  if ((sale.tankSize ?? '').isNotEmpty) sale.tankSize!,
-                ].join(' · '),
-                icon: Icons.receipt_long_rounded,
-                onTap: () =>
-                    Navigator.of(context).pop(ReferralChoice.sale(sale)),
-              ),
-            )
-            .toList(),
       ReferralSource.contact =>
         _contacts
             .map(

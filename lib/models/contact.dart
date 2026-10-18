@@ -43,9 +43,7 @@ class Contact {
     this.remarks,
     this.latitude,
     this.longitude,
-    this.referredBySaleId,
     this.referredByContactId,
-    this.referredBySaleBuyerName,
     this.referredByContactName,
     this.referredByContactPhone,
     this.professionalType,
@@ -89,9 +87,7 @@ class Contact {
   final String? remarks;
   final String? latitude;
   final String? longitude;
-  final int? referredBySaleId;
   final int? referredByContactId;
-  final String? referredBySaleBuyerName;
   final String? referredByContactName;
   final String? referredByContactPhone;
   final String? professionalType;
@@ -134,9 +130,6 @@ class Contact {
     }
     if (referredByContactName != null) {
       return 'Contact · $referredByContactName';
-    }
-    if (referredBySaleBuyerName != null) {
-      return 'Sale · $referredBySaleBuyerName';
     }
     return null;
   }
@@ -221,7 +214,6 @@ class ContactDraft {
     this.remarks,
     this.latitude,
     this.longitude,
-    this.referredBySaleId,
     this.referredByContactId,
     this.professionalType,
     this.professionalName,
@@ -249,7 +241,6 @@ class ContactDraft {
   String? remarks;
   String? latitude;
   String? longitude;
-  int? referredBySaleId;
   int? referredByContactId;
   String? professionalType;
   String? professionalName;
@@ -278,7 +269,6 @@ class ContactDraft {
       remarks: contact.remarks,
       latitude: contact.latitude,
       longitude: contact.longitude,
-      referredBySaleId: contact.referredBySaleId,
       referredByContactId: contact.referredByContactId,
       professionalType: contact.professionalType,
       professionalName: contact.professionalName,

@@ -6,9 +6,6 @@ import 'core/network/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/crm_services.dart';
 import 'services/geocoding_service.dart';
-import 'services/location_api_service.dart';
-import 'services/location_queue.dart';
-import 'services/location_tracking_service.dart';
 import 'theme/app_theme.dart';
 import 'view_models/login_view_model.dart';
 import 'view_models/session_view_model.dart';
@@ -37,7 +34,6 @@ class OgeraCrmApp extends StatelessWidget {
         Provider<ApiClient>(create: (_) => ApiClient()),
         Provider<SessionStore>(create: (_) => SecureSessionStore()),
         Provider<GeocodingService>(create: (_) => GeocodingService()),
-        Provider<LocationQueue>(create: (_) => LocationQueue()),
 
         ProxyProvider2<ApiClient, SessionStore, AuthService>(
           update: (_, api, store, _) => AuthService(api, store),
@@ -51,33 +47,14 @@ class OgeraCrmApp extends StatelessWidget {
         ProxyProvider<ApiClient, FollowupsService>(
           update: (_, api, _) => FollowupsService(api),
         ),
-        ProxyProvider<ApiClient, SalesService>(
-          update: (_, api, _) => SalesService(api),
-        ),
-        ProxyProvider<ApiClient, PerformanceService>(
-          update: (_, api, _) => PerformanceService(api),
-        ),
         ProxyProvider<ApiClient, StaffDirectoryService>(
           update: (_, api, _) => StaffDirectoryService(api),
-        ),
-        ProxyProvider<ApiClient, LocationApiService>(
-          update: (_, api, _) => LocationApiService(api),
-        ),
-        ProxyProvider2<
-          LocationApiService,
-          LocationQueue,
-          LocationTrackingService
-        >(
-          update: (_, api, queue, previous) =>
-              previous ?? LocationTrackingService(api, queue),
-          dispose: (_, service) => service.dispose(),
         ),
 
         ChangeNotifierProvider<SessionViewModel>(
           create: (context) => SessionViewModel(
             auth: context.read<AuthService>(),
             api: context.read<ApiClient>(),
-            tracking: context.read<LocationTrackingService>(),
           )..bootstrap(),
         ),
         ChangeNotifierProvider<LoginViewModel>(

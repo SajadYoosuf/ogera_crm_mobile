@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../view_models/session_view_model.dart';
-import 'location_gate_screen.dart';
 import 'login_screen.dart';
 import 'shell_screen.dart';
 import 'splash_screen.dart';
 
 /// The only place that decides which experience is on screen.
 ///
-/// A staff session cannot reach the shell until the location gate is satisfied,
-/// and a revoked session drops straight back to login from wherever the user
-/// was — both are expressed here as a single switch on [SessionStatus].
+/// A revoked session drops straight back to login from wherever the user was;
+/// both states are expressed here as a single switch on [SessionStatus].
 class RootRouter extends StatelessWidget {
   const RootRouter({super.key});
 
@@ -29,9 +27,6 @@ class RootRouter extends StatelessWidget {
       child: switch (status) {
         SessionStatus.restoring => const SplashScreen(key: ValueKey('splash')),
         SessionStatus.signedOut => const LoginScreen(key: ValueKey('login')),
-        SessionStatus.needsLocation => const LocationGateScreen(
-          key: ValueKey('gate'),
-        ),
         SessionStatus.ready => const ShellScreen(key: ValueKey('shell')),
       },
     );

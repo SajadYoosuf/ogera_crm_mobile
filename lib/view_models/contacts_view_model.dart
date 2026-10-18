@@ -240,17 +240,9 @@ class ContactFormViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Referral paths are mutually exclusive: choosing one clears the other two.
-  void setSaleReferral(int? saleId) {
-    draft.referredBySaleId = saleId;
-    draft.referredByContactId = null;
-    _clearProfessionalReferral();
-    notifyListeners();
-  }
-
+  /// Referral paths are mutually exclusive: choosing one clears the other.
   void setContactReferral(int? contactId) {
     draft.referredByContactId = contactId;
-    draft.referredBySaleId = null;
     _clearProfessionalReferral();
     notifyListeners();
   }
@@ -271,13 +263,11 @@ class ContactFormViewModel extends ChangeNotifier {
     draft.professionalAddress = address;
     draft.professionalLatitude = latitude;
     draft.professionalLongitude = longitude;
-    draft.referredBySaleId = null;
     draft.referredByContactId = null;
     notifyListeners();
   }
 
   void clearReferral() {
-    draft.referredBySaleId = null;
     draft.referredByContactId = null;
     _clearProfessionalReferral();
     notifyListeners();

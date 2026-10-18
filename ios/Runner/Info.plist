@@ -66,19 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Staff location sharing. iOS shows these strings verbatim in the
-	     permission prompts, so they say who sees the data and when. -->
+	<!-- Contact GPS capture: the "use my location" button and the location picker. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Ogera CRM shares your location with your Sales Head while you are signed in, so field visits and routes can be verified.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Ogera CRM keeps sharing your location in the background while you are signed in, so your route stays complete when the app is not on screen.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Ogera CRM keeps sharing your location in the background while you are signed in, so your route stays complete when the app is not on screen.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-		<string>fetch</string>
-	</array>
+	<string>Ogera CRM uses your location only when you capture a contact's location.</string>
 	<!-- Call and WhatsApp actions on contact and professional rows. -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>

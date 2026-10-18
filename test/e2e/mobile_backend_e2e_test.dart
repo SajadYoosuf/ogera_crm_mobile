@@ -6,11 +6,8 @@ import 'package:ogera_crm_mobile/core/utils/formatters.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/models/contact.dart';
 import 'package:ogera_crm_mobile/models/professional.dart';
-import 'package:ogera_crm_mobile/models/sale.dart';
-import 'package:ogera_crm_mobile/models/staff_location.dart';
 import 'package:ogera_crm_mobile/services/auth_service.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
-import 'package:ogera_crm_mobile/services/location_api_service.dart';
 import 'package:ogera_crm_mobile/view_models/contacts_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/followups_view_model.dart';
 
@@ -50,10 +47,7 @@ class _Phone {
   ContactsService get contacts => ContactsService(api);
   ProfessionalsService get professionals => ProfessionalsService(api);
   FollowupsService get followups => FollowupsService(api);
-  SalesService get sales => SalesService(api);
-  PerformanceService get performance => PerformanceService(api);
   StaffDirectoryService get staff => StaffDirectoryService(api);
-  LocationApiService get locations => LocationApiService(api);
 }
 
 void main() {
@@ -565,198 +559,6 @@ void main() {
       await admin.followups.deleteLead(lead.id);
       final leads = await admin.followups.leads();
       expect(leads.any((l) => l.id == lead.id), isFalse);
-    });
-  });
-
-  group('sales register', () {
-    late Sale created;
-
-    test('a manager creates, lists, searches, edits and deletes', () async {
-      created = await manager.sales.create(
-        SaleDraft(
-          saleDate: '2026-09-01',
-          buyerName: 'Buyer One',
-          buyerPhone: '9947270717',
-          address: 'Feroke',
-          tankSize: '500 LTR Vertical Tank',
-        ),
-      );
-      expect(created.buyerName, 'Buyer One');
-      expect(created.saleDate, '2026-09-01');
-      expect(created.tankSize, '500 LTR Vertical Tank');
-
-      final page = await manager.sales.list(query: 'Buyer');
-      expect(page.sales.map((s) => s.id), contains(created.id));
-      expect(page.total, greaterThanOrEqualTo(1));
-
-      final found = await manager.sales.search('9947270717');
-      expect(found.map((s) => s.id), contains(created.id));
-
-      final products = await manager.sales.products();
-      expect(products.map((p) => p.name), contains('500 LTR Vertical Tank'));
-
-      final inRange = await manager.sales.list(
-        startDate: '2026-09-01',
-        endDate: '2026-09-30',
-      );
-      expect(inRange.sales.map((s) => s.id), contains(created.id));
-      final outOfRange = await manager.sales.list(
-        startDate: '2025-01-01',
-        endDate: '2025-01-31',
-      );
-      expect(outOfRange.sales.map((s) => s.id), isNot(contains(created.id)));
-
-      final edited = await manager.sales.update(
-        created.id,
-        SaleDraft.fromSale(created)..buyerName = 'Buyer Uno',
-      );
-      expect(edited.buyerName, 'Buyer Uno');
-
-      await manager.sales.delete(created.id);
-      final after = await manager.sales.list(query: 'Buyer Uno');
-      expect(after.sales, isEmpty);
-    });
-
-    test('staff may read the register but not change it', () async {
-      await expectLater(
-        anu.sales.create(SaleDraft(buyerName: 'Nope')),
-        throwsA(
-          isA<ApiException>().having(
-            (e) => e.kind,
-            'kind',
-            FailureKind.forbidden,
-          ),
-        ),
-      );
-      expect((await anu.sales.list()).total, greaterThanOrEqualTo(0));
-    });
-
-    test('an invalid phone number is explained', () async {
-      await expectLater(
-        manager.sales.create(
-          SaleDraft(buyerName: 'Bad Phone', buyerPhone: '12'),
-        ),
-        throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 422)),
-      );
-    });
-  });
-
-  group('team and performance', () {
-    test('a head sees the team, staff see only themselves', () async {
-      final today = todayIso();
-      final team = await admin.performance.fetch(
-        startDate: today,
-        endDate: today,
-      );
-      expect(team.isTeam, isTrue);
-      expect(team.staff.map((s) => s.name), contains('Ada Admin'));
-      expect(team.leads + team.awareness, greaterThanOrEqualTo(1));
-
-      final mine = await anu.performance.fetch(
-        startDate: today,
-        endDate: today,
-      );
-      expect(mine.isTeam, isFalse);
-      expect(mine.staff.single.name, 'Anu Sales');
-    });
-
-    test('a range with nothing in it is empty, not an error', () async {
-      final report = await admin.performance.fetch(
-        startDate: '2001-01-01',
-        endDate: '2001-01-02',
-      );
-      expect(report.leads, 0);
-      expect(report.awareness, 0);
-    });
-
-    test('the staff directory is open to every signed-in employee', () async {
-      final people = await anu.staff.list();
-      expect(
-        people.map((p) => p.name),
-        containsAll(['Ada Admin', 'Anu Sales', 'Raj Field']),
-      );
-    });
-  });
-
-  group('staff locations', () {
-    final now = DateTime.now().toUtc();
-
-    PendingPoint point(int minutesAgo, double lat, {bool moving = true}) =>
-        PendingPoint(
-          latitude: lat,
-          longitude: 75.78,
-          recordedAt: now.subtract(Duration(minutes: minutesAgo)),
-          isMoving: moving,
-          accuracy: 8.5,
-          speed: 1.2,
-          batteryLevel: 80,
-        );
-
-    test('staff upload a batch, a retry adds nothing', () async {
-      final batch = [point(6, 11.25), point(4, 11.26), point(2, 11.27)];
-      await raj.locations.upload(batch);
-      await raj.locations.upload(batch);
-
-      final route = await raj.locations.myRoute(userId: raj.user.id);
-      expect(route.points, hasLength(3));
-      expect(route.distanceMeters, greaterThan(0));
-      expect(route.firstSeen, isNotNull);
-    });
-
-    test('a head sees the live map with colour, state and position', () async {
-      final live = await admin.locations.live();
-      final rajOnMap = live.firstWhere((s) => s.userId == raj.user.id);
-      expect(rajOnMap.name, 'Raj Field');
-      expect(rajOnMap.state, StaffState.moving);
-      expect(rajOnMap.position.latitude, closeTo(11.27, 1e-6));
-      expect(rajOnMap.colorIndex, isNotNull);
-    });
-
-    test('route history for a day', () async {
-      final route = await admin.locations.history(
-        userId: raj.user.id,
-        date: todayIso(),
-      );
-      expect(route.points.length, greaterThanOrEqualTo(1));
-    });
-
-    test('switching location off shows on the head map', () async {
-      await raj.locations.reportState('location_disabled');
-      final live = await admin.locations.live();
-      expect(
-        live.firstWhere((s) => s.userId == raj.user.id).state,
-        StaffState.locationDisabled,
-      );
-    });
-
-    test('staff cannot see the live map or someone else\'s route', () async {
-      await expectLater(
-        anu.locations.live(),
-        throwsA(
-          isA<ApiException>().having(
-            (e) => e.kind,
-            'kind',
-            FailureKind.forbidden,
-          ),
-        ),
-      );
-      await expectLater(
-        anu.locations.history(userId: raj.user.id, date: todayIso()),
-        throwsA(
-          isA<ApiException>().having(
-            (e) => e.kind,
-            'kind',
-            FailureKind.forbidden,
-          ),
-        ),
-      );
-    });
-
-    test('an unknown tracking state is refused', () async {
-      await expectLater(
-        raj.locations.reportState('on_the_moon'),
-        throwsA(isA<ApiException>()),
-      );
     });
   });
 }

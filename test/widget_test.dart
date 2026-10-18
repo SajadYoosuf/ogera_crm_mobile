@@ -3,9 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/auth_service.dart';
-import 'package:ogera_crm_mobile/services/location_api_service.dart';
-import 'package:ogera_crm_mobile/services/location_queue.dart';
-import 'package:ogera_crm_mobile/services/location_tracking_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
 import 'package:ogera_crm_mobile/view_models/login_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
@@ -55,15 +52,10 @@ void main() {
 Widget _harness({_FakeAuthService? auth}) {
   final service = auth ?? _FakeAuthService();
   final api = ApiClient();
-  final tracking = LocationTrackingService(
-    LocationApiService(api),
-    LocationQueue(),
-  );
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<SessionViewModel>(
-        create: (_) =>
-            SessionViewModel(auth: service, api: api, tracking: tracking),
+        create: (_) => SessionViewModel(auth: service, api: api),
       ),
       ChangeNotifierProvider<LoginViewModel>(
         create: (_) => LoginViewModel(service),

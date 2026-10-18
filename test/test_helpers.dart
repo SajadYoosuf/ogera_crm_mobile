@@ -1,14 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
-import 'package:ogera_crm_mobile/models/staff_location.dart';
 import 'package:ogera_crm_mobile/services/auth_service.dart';
-import 'package:ogera_crm_mobile/services/location_queue.dart';
 
 /// Shared fakes for the module widget tests. Kept in one place so each test
 /// file only has to describe the data it cares about, not the plumbing.
@@ -50,60 +46,6 @@ class FakeAuthService implements AuthService {
   Future<void> signOut() async {
     signOutCalled = true;
   }
-}
-
-/// Lets `SessionViewModel.adopt` resolve instantly for a Staff session without
-/// touching a real location plugin: reporting the service as unavailable is
-/// the first check `LocationTrackingService.checkPermission` makes, and it
-/// short-circuits before anything platform-specific runs.
-class NoLocationServicePlatform extends GeolocatorPlatform {
-  @override
-  Future<bool> isLocationServiceEnabled() async => false;
-}
-
-/// A [LocationQueue] that never opens a real database. `sqflite` has no
-/// platform implementation inside a widget test, so a `SessionViewModel`
-/// harness always passes this instead of a real queue.
-class NoopLocationQueue implements LocationQueue {
-  @override
-  Future<void> add(PendingPoint point) async {}
-
-  @override
-  Future<List<PendingPoint>> take(int limit) async => const [];
-
-  @override
-  Future<void> remove(List<PendingPoint> points) async {}
-
-  @override
-  Future<int> count() async => 0;
-
-  @override
-  Future<void> clear() async {}
-
-  @override
-  Future<void> close() async {}
-}
-
-/// Fails any real network request immediately instead of letting it hang —
-/// used so `flutter_map`'s tile layer cannot reach out to the real internet
-/// while the Map tab is mounted (it stays in the widget tree even when it is
-/// not the visible shell tab, because `IndexedStack` builds every child).
-class NoNetworkHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) => _FailingHttpClient();
-}
-
-class _FailingHttpClient implements HttpClient {
-  @override
-  Future<HttpClientRequest> getUrl(Uri url) async {
-    throw const SocketException('Network disabled in tests');
-  }
-
-  @override
-  void close({bool force = false}) {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 // ------------------------------------------------------------------ builders
@@ -236,18 +178,3 @@ Map<String, dynamic> stageJson({
   required String label,
   required int orderIndex,
 }) => {'id': id, 'label': label, 'order_index': orderIndex};
-
-Map<String, dynamic> staffLocationJson({
-  required int userId,
-  required String name,
-  double latitude = 11.25,
-  double longitude = 75.78,
-  String state = 'moving',
-}) => {
-  'userId': userId,
-  'name': name,
-  'latitude': latitude,
-  'longitude': longitude,
-  'state': state,
-  'recordedAt': '2026-01-01T00:00:00.000Z',
-};

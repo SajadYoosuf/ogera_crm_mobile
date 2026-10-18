@@ -1,28 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/network/api_client.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/contact.dart';
 import '../../models/followup.dart';
-import '../../models/staff_location.dart';
-import '../../services/location_api_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/contacts_view_model.dart';
 import '../../view_models/followups_view_model.dart';
-import '../../view_models/sales_view_model.dart';
 import '../../view_models/session_view_model.dart';
 import '../contacts/contact_detail_screen.dart';
 import '../followups/lead_detail_screen.dart';
-import '../map/staff_route_sheet.dart';
 import '../shell_scope.dart';
 
 /// Two dashboards behind one tab.
 ///
-/// Head sees the team: pipeline, sales, who is in the field right now. Staff
+/// Head sees the team's pipeline and recent contacts. Staff
 /// see only their own day — what is overdue and what is due today, because that
 /// is the entire job on a phone.
 ///
@@ -103,7 +97,6 @@ class _HeadHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final contacts = context.watch<ContactsViewModel>();
     final followups = context.watch<FollowupsViewModel>();
-    final sales = context.watch<SalesViewModel>();
 
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
@@ -113,7 +106,6 @@ class _HeadHome extends StatelessWidget {
           await Future.wait([
             contacts.refresh(),
             followups.refresh(),
-            sales.refresh(),
           ]);
         },
         child: ListView(
@@ -140,16 +132,8 @@ class _HeadHome extends StatelessWidget {
                   icon: Icons.campaign_outlined,
                   color: OgeraColors.info,
                 ),
-                _MetricData(
-                  label: 'Sales',
-                  value: '${sales.total}',
-                  icon: Icons.receipt_long_outlined,
-                  color: OgeraColors.success,
-                ),
               ],
             ),
-            const SizedBox(height: 20),
-            const _StaffOnDuty(),
             const SizedBox(height: 20),
             _PipelineBreakdown(viewModel: followups),
             const SizedBox(height: 20),
@@ -161,177 +145,6 @@ class _HeadHome extends StatelessWidget {
   }
 }
 
-/// A live strip of who is in the field. It polls once when Home opens rather
-/// than continuously — the Map tab is where live monitoring belongs.
-class _StaffOnDuty extends StatefulWidget {
-  const _StaffOnDuty();
-
-  @override
-  State<_StaffOnDuty> createState() => _StaffOnDutyState();
-}
-
-class _StaffOnDutyState extends State<_StaffOnDuty> {
-  List<StaffLocation> _staff = const [];
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final staff = await context.read<LocationApiService>().live();
-      if (!mounted) return;
-      setState(() {
-        _staff = staff;
-        _isLoading = false;
-        _error = null;
-      });
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = error.message;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final live = _staff.where((row) => row.state == StaffState.moving).length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(
-          title: 'Staff in the field',
-          icon: Icons.person_pin_circle_outlined,
-          action: _isLoading || _error != null
-              ? null
-              : StatusChip(
-                  label: '$live moving',
-                  tone: live > 0 ? StatusTone.success : StatusTone.neutral,
-                  icon: Icons.podcasts_rounded,
-                  dense: true,
-                ),
-        ),
-        if (_isLoading)
-          const ShimmerBox(height: 96)
-        else if (_error != null)
-          OgeraCard(
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.cloud_off_rounded,
-                  size: 18,
-                  color: OgeraColors.muted,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: OgeraColors.muted,
-                    ),
-                  ),
-                ),
-                TextButton(onPressed: _load, child: const Text('Retry')),
-              ],
-            ),
-          )
-        else if (_staff.isEmpty)
-          const OgeraCard(
-            child: Text(
-              'No staff have shared a location yet. Locations appear once your '
-              'Sales Staff sign in on mobile and allow location sharing.',
-              style: TextStyle(
-                fontSize: 13.5,
-                height: 1.45,
-                color: OgeraColors.muted,
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 124,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _staff.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, index) => _StaffChip(staff: _staff[index]),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _StaffChip extends StatelessWidget {
-  const _StaffChip({required this.staff});
-
-  final StaffLocation staff;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 104,
-      child: OgeraCard(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        onTap: () => showStaffRouteSheet(
-          context,
-          staff: staff,
-          // Home has no map of its own, so focusing a stop is a no-op here;
-          // the sheet still opens Directions for any point.
-          onFocus: (LatLng _) {},
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                OgeraAvatar(name: staff.name, size: 42, color: staff.color),
-                Container(
-                  width: 13,
-                  height: 13,
-                  decoration: BoxDecoration(
-                    color: staff.state.color,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: OgeraColors.surface, width: 2),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              staff.name.split(RegExp(r'\s+')).first,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              staff.lastSeenLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, color: OgeraColors.muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Where the pipeline actually sits, as proportional bars — the shape of the
-/// funnel is the point, not the individual counts.
 class _PipelineBreakdown extends StatelessWidget {
   const _PipelineBreakdown({required this.viewModel});
 
@@ -579,8 +392,6 @@ class _StaffHome extends StatelessWidget {
           ),
           children: [
             const _Greeting(),
-            const _TrackingBanner(),
-            const SizedBox(height: 16),
             _MetricGrid(
               metrics: [
                 _MetricData(
@@ -661,59 +472,6 @@ class _StaffHome extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// A quiet, permanent reminder that location is being shared, and whether
-/// anything is still waiting to reach the server.
-class _TrackingBanner extends StatelessWidget {
-  const _TrackingBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final tracking = context.read<SessionViewModel>().tracking;
-
-    return ValueListenableBuilder<int>(
-      valueListenable: tracking.pendingCount,
-      builder: (context, pending, _) {
-        final isQueued = pending > 0;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: isQueued ? OgeraColors.warningSoft : OgeraColors.successSoft,
-            borderRadius: BorderRadius.circular(OgeraSpacing.cardRadius),
-            border: Border.all(
-              color: (isQueued ? OgeraColors.warning : OgeraColors.success)
-                  .withValues(alpha: 0.25),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isQueued ? Icons.cloud_upload_outlined : Icons.podcasts_rounded,
-                size: 19,
-                color: isQueued ? OgeraColors.warning : OgeraColors.success,
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  isQueued
-                      ? '$pending location${pending == 1 ? '' : 's'} waiting to sync. '
-                            'They will upload when you are back online.'
-                      : 'Location sharing is on. Your route is up to date.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    fontWeight: FontWeight.w600,
-                    color: isQueued ? OgeraColors.warning : OgeraColors.success,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

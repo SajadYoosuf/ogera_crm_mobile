@@ -2,9 +2,7 @@ import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
 import '../models/contact.dart';
 import '../models/followup.dart';
-import '../models/performance.dart';
 import '../models/professional.dart';
-import '../models/sale.dart';
 
 /// One file for the record modules. They all talk to the same FastAPI server
 /// with the same bearer token; the services translate between its snake_case
@@ -408,7 +406,7 @@ class FollowupsService {
   Future<void> addRemark(int leadId, String remark) {
     return _api.post(
       '/contacts/$leadId/activities',
-      body: {'type': 'internal_note', 'notes': remark},
+      body: {'activity_type': 'internal_note', 'notes': remark},
     );
   }
 
@@ -418,84 +416,6 @@ class FollowupsService {
 
   Future<void> updateStage(String id, {String? label, int? orderIndex}) =>
       Future.error(_fixedStages);
-}
-
-/// The sales register (admin and manager only on the server for writes).
-class SalesService {
-  const SalesService(this._api);
-
-  final ApiClient _api;
-
-  /// The register keeps only date, buyer, phones, address and product, so the
-  /// old panchayath / ward / water source / source-of-sale filters are gone.
-  Future<SalePage> list({
-    String? query,
-    String? startDate,
-    String? endDate,
-    int page = 1,
-    int limit = 20,
-  }) async {
-    final data = await _api.get(
-      '/sales',
-      query: {
-        'search': query,
-        'purchased_from': startDate,
-        'purchased_to': endDate,
-        'skip': (page - 1) * limit,
-        'limit': limit,
-      },
-    );
-    return SalePage.fromJson(asMap(data));
-  }
-
-  /// Sales are not linked to contacts on the server, so there is nothing
-  /// referred by a sale to show.
-  Future<List<Contact>> referrals(int saleId) async => const [];
-
-  Future<Sale> create(SaleDraft draft) async {
-    final data = await _api.post('/sales', body: draft.toApiJson());
-    return Sale.fromJson(asMap(data));
-  }
-
-  Future<Sale> update(int id, SaleDraft draft) async {
-    final data = await _api.put('/sales/$id', body: draft.toApiJson());
-    return Sale.fromJson(asMap(data));
-  }
-
-  Future<void> delete(int id) => _api.delete('/sales/$id');
-
-  Future<List<ProductOption>> products() async {
-    final data = await _api.get('/sales/products');
-    final names = data is List ? data.map((e) => e.toString()).toList() : [];
-    return [
-      for (var i = 0; i < names.length; i++)
-        ProductOption.fromName(names[i], i),
-    ];
-  }
-
-  /// Referral picker for the contact form.
-  Future<List<Sale>> search(String query) async {
-    final page = await list(query: query, limit: 10);
-    return page.sales;
-  }
-}
-
-class PerformanceService {
-  const PerformanceService(this._api);
-
-  final ApiClient _api;
-
-  /// Managers get the whole team; the server narrows anyone else to themselves.
-  Future<PerformanceReport> fetch({
-    required String startDate,
-    required String endDate,
-  }) async {
-    final data = await _api.get(
-      '/performance',
-      query: {'start_date': startDate, 'end_date': endDate},
-    );
-    return PerformanceReport.fromJson(data);
-  }
 }
 
 class StaffDirectoryService {

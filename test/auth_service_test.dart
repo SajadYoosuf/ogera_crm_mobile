@@ -77,7 +77,6 @@ void main() {
       'team_lead',
       'tele_caller',
       'field_executive',
-      'support',
       'accounts_executive', // a custom role created in the web app
     ]) {
       final service = _serviceReplying(
@@ -91,6 +90,17 @@ void main() {
       expect(session.user.role, UserRole.salesStaff, reason: role);
       expect(session.user.isStaff, isTrue);
     }
+  });
+
+  test('support signs in as staff but cannot move leads through the pipeline', () async {
+    final service = _serviceReplying(
+      (_) => http.Response(jsonEncode(_loginReply(id: 1, role: 'support')), 200),
+    );
+    final session = await service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff);
+    expect(session.user.role, UserRole.support);
+    expect(session.user.isStaff, isTrue);
+    expect(session.user.role.canMoveStage, isFalse);
+    expect(UserRole.salesStaff.canMoveStage, isTrue);
   });
 
   test('admin and manager are the Head audience', () async {

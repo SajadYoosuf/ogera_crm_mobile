@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
-import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/core/utils/formatters.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
-import 'package:ogera_crm_mobile/services/location_api_service.dart';
-import 'package:ogera_crm_mobile/services/location_tracking_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
 import 'package:ogera_crm_mobile/view_models/contacts_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/followups_view_model.dart';
-import 'package:ogera_crm_mobile/view_models/sales_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/home/home_tab.dart';
 import 'package:provider/provider.dart';
@@ -20,13 +15,7 @@ import 'test_helpers.dart';
 /// The Home module renders one of two dashboards depending on role: the Head
 /// gets a team overview, Staff get their own day's queue.
 void main() {
-  setUpAll(() {
-    // Only the Staff scenario needs this (its session adoption checks
-    // location permission), but it is harmless for the Head scenario too.
-    GeolocatorPlatform.instance = NoLocationServicePlatform();
-  });
-
-  testWidgets('Head sees the team overview with pipeline and sales count', (
+  testWidgets('Head sees the team overview with pipeline and recent contacts', (
     tester,
   ) async {
     final api = fakeApiClient({
@@ -54,10 +43,6 @@ void main() {
         stageJson(id: 'won', label: 'Won', orderIndex: 1),
       ],
       '/employees/directory': (_) => <Map<String, dynamic>>[],
-      '/sales': (_) => pageOf([], total: 7),
-      '/staff/locations/live': (_) => {
-        'staff': [staffLocationJson(userId: 9, name: 'Rahul Staff')],
-      },
     });
 
     final headUser = const AuthUser(
@@ -74,16 +59,11 @@ void main() {
       StaffDirectoryService(api),
       headUser,
     );
-    final sales = SalesViewModel(SalesService(api));
-    await Future.wait([contacts.load(), followups.load(), sales.load()]);
+    await Future.wait([contacts.load(), followups.load()]);
 
     final session = SessionViewModel(
       auth: FakeAuthService(),
       api: api,
-      tracking: LocationTrackingService(
-        LocationApiService(api),
-        NoopLocationQueue(),
-      ),
     );
     await session.adopt(AuthSession(accessToken: 'token', user: headUser));
 
@@ -93,8 +73,6 @@ void main() {
           ChangeNotifierProvider<SessionViewModel>.value(value: session),
           ChangeNotifierProvider<ContactsViewModel>.value(value: contacts),
           ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
-          ChangeNotifierProvider<SalesViewModel>.value(value: sales),
-          Provider<LocationApiService>(create: (_) => LocationApiService(api)),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),
@@ -111,14 +89,9 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(find.text('Awareness'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
-    expect(find.text('Sales'), findsOneWidget);
-    expect(find.text('7'), findsOneWidget);
 
     // Everything below the metric grid sits below the fold at the default
     // test viewport, so each section is scrolled into view in turn.
-    await _scrollUntilVisible(tester, find.text('Rahul'));
-    expect(find.text('Rahul'), findsOneWidget); // Chip shows first name only.
-
     // SectionHeader renders its title upper-cased.
     await _scrollUntilVisible(tester, find.text('PIPELINE'));
     expect(find.text('PIPELINE'), findsOneWidget);
@@ -188,13 +161,8 @@ void main() {
     final session = SessionViewModel(
       auth: FakeAuthService(),
       api: api,
-      tracking: LocationTrackingService(
-        LocationApiService(api),
-        NoopLocationQueue(),
-      ),
     );
     await session.adopt(AuthSession(accessToken: 'token', user: staffUser));
-    addTearDown(() => session.tracking.dispose());
 
     await tester.pumpWidget(
       MultiProvider(
@@ -212,11 +180,6 @@ void main() {
 
     expect(find.text('My day'), findsOneWidget);
     expect(find.text('Sales Staff'), findsOneWidget);
-
-    expect(
-      find.text('Location sharing is on. Your route is up to date.'),
-      findsOneWidget,
-    );
 
     expect(find.text('Overdue'), findsOneWidget);
     expect(find.text('Due today'), findsOneWidget);

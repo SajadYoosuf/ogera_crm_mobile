@@ -10,7 +10,8 @@ import '../core/utils/formatters.dart';
 enum UserRole {
   admin('admin', 'Admin'),
   salesHead('manager', 'Manager'),
-  salesStaff('sales_staff', 'Sales Staff');
+  salesStaff('sales_staff', 'Sales Staff'),
+  support('support', 'Support');
 
   const UserRole(this.id, this.label);
 
@@ -20,13 +21,17 @@ enum UserRole {
   static UserRole fromId(String? value) => switch (value) {
     'admin' => UserRole.admin,
     'manager' || 'sales_head' => UserRole.salesHead,
+    'support' => UserRole.support,
     _ => UserRole.salesStaff,
   };
 
   /// Admin and Sales Head share one experience throughout the app; the PRD
   /// calls that combined audience "Head".
   bool get isHead => this == UserRole.admin || this == UserRole.salesHead;
-  bool get isStaff => this == UserRole.salesStaff;
+  bool get isStaff => this == UserRole.salesStaff || this == UserRole.support;
+
+  /// Support handles after-sales and cannot move leads through the pipeline (rule in role_access.py).
+  bool get canMoveStage => this != UserRole.support;
 }
 
 /// Which login tab produced this session. The tab is a routing hint checked on

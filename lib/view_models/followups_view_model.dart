@@ -183,6 +183,7 @@ class FollowupsViewModel extends ChangeNotifier {
   }
 
   Future<String?> moveStage(Lead lead, String stageId) async {
+    if (!_user.role.canMoveStage) return 'Your role cannot move leads between stages.';
     final denied = _assignedOnlyError(lead);
     if (denied != null) return denied;
     final blockers = blockersForStageChange(lead, stageId);

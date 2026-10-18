@@ -9,7 +9,6 @@ import '../../models/contact.dart';
 import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/contacts_view_model.dart';
-import '../../view_models/session_view_model.dart';
 import '../shared/location_capture_field.dart';
 import 'referral_picker_sheet.dart';
 
@@ -96,17 +95,11 @@ class _ContactFormViewState extends State<_ContactFormView> {
   }
 
   Future<void> _pickReferral() async {
-    final choice = await showReferralPicker(
-      context,
-      // The sales register is not linked to contacts on the server.
-      canSearchSales: false,
-    );
+    final choice = await showReferralPicker(context);
     if (choice == null) return;
     setState(() => _referral = choice);
 
     switch (choice.source) {
-      case ReferralSource.sale:
-        _viewModel.setSaleReferral(choice.sale!.id);
       case ReferralSource.contact:
         _viewModel.setContactReferral(choice.contact!.id);
       case ReferralSource.professional:
@@ -305,9 +298,6 @@ class _ContactFormViewState extends State<_ContactFormView> {
     }
     if (draft.referredByContactId != null) {
       return 'Contact #${draft.referredByContactId}';
-    }
-    if (draft.referredBySaleId != null) {
-      return 'Sale #${draft.referredBySaleId}';
     }
     return null;
   }

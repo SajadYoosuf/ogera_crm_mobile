@@ -1,12 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
-import 'package:ogera_crm_mobile/services/location_api_service.dart';
-import 'package:ogera_crm_mobile/services/location_tracking_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/shell_screen.dart';
@@ -18,22 +14,10 @@ import 'test_helpers.dart';
 /// the active tab, offers the quick-action FAB only where creating a record
 /// makes sense, and keeps rendering cleanly across phone screen sizes.
 ///
-/// `IndexedStack` mounts every tab up front — including the Map tab, whose
-/// `flutter_map` tile layer would otherwise reach for the real internet — so
-/// every test here disables outgoing network via [NoNetworkHttpOverrides].
-/// The Map tab also stays "loading" (an indeterminate, never-settling
-/// progress indicator) until it is actually selected, since the shell only
-/// activates a tab's view model once the user opens it — so this file settles
-/// with a bounded [_settle] instead of `pumpAndSettle`, which would hang.
+/// The shell's tabs load lazily, and a tab can show an indeterminate progress
+/// indicator, so this file settles with a bounded [_settle] instead of
+/// `pumpAndSettle`, which would hang.
 void main() {
-  setUpAll(() {
-    HttpOverrides.global = NoNetworkHttpOverrides();
-  });
-
-  tearDownAll(() {
-    HttpOverrides.global = null;
-  });
-
   testWidgets(
     'bottom navigation bar lists every module and switches the active tab',
     (tester) async {
@@ -45,7 +29,6 @@ void main() {
         'Contacts',
         'Pros',
         'Follow-ups',
-        'Map',
         'More',
       ]) {
         expect(find.text(label), findsOneWidget);
@@ -66,11 +49,6 @@ void main() {
       await _settle(tester);
       expect(find.widgetWithText(AppBar, 'Follow-ups'), findsOneWidget);
 
-      // The Map tab has no app bar of its own; its "fit to pins" button is.
-      await tester.tap(find.text('Map'));
-      await _settle(tester);
-      expect(find.byTooltip('Fit everything on screen'), findsOneWidget);
-
       await tester.tap(find.text('More'));
       await _settle(tester);
       expect(find.widgetWithText(AppBar, 'More'), findsOneWidget);
@@ -83,38 +61,34 @@ void main() {
   );
 
   testWidgets(
-    'quick-action FAB appears only on Home, Contacts, and Professionals',
+    'quick-action FAB appears only on Home; Contacts and Pros have a direct add button',
     (tester) async {
       await tester.pumpWidget(await _shellHarness());
       await _settle(tester);
 
-      // The shell's own expandable FAB — distinct from Follow-ups' unrelated
-      // "Add lead" FAB, which lives inside that tab's own nested Scaffold.
+      // Home's expandable FAB opens the quick actions. Its type is unambiguous
+      // here because it is the only QuickActionFab on screen.
       expect(find.byType(QuickActionFab), findsOneWidget);
+      await tester.tap(find.byType(FloatingActionButton));
+      await _settle(tester);
+      expect(find.text('Add contact'), findsOneWidget);
+      expect(find.text('Add professional'), findsOneWidget);
+      expect(find.text('Add sale'), findsNothing);
+      await tester.tap(find.byType(FloatingActionButton));
+      await _settle(tester);
 
-      await tester.tap(find.text('Follow-ups'));
+      await tester.tap(find.text('Contacts'));
       await _settle(tester);
       expect(find.byType(QuickActionFab), findsNothing);
+      expect(find.byTooltip('Add contact'), findsOneWidget);
 
-      await tester.tap(find.text('Map'));
+      await tester.tap(find.text('Follow-ups'));
       await _settle(tester);
       expect(find.byType(QuickActionFab), findsNothing);
 
       await tester.tap(find.text('More'));
       await _settle(tester);
       expect(find.byType(QuickActionFab), findsNothing);
-
-      await tester.tap(find.text('Contacts'));
-      await _settle(tester);
-      expect(find.byType(QuickActionFab), findsOneWidget);
-
-      // Expanding it offers every quick action a Head session gets. Only the
-      // shell's own FAB is on screen here, so its type is unambiguous.
-      await tester.tap(find.byType(FloatingActionButton));
-      await _settle(tester);
-      expect(find.text('Add contact'), findsOneWidget);
-      expect(find.text('Add professional'), findsOneWidget);
-      expect(find.text('Add sale'), findsOneWidget);
     },
   );
 
@@ -151,7 +125,6 @@ void main() {
           'Contacts',
           'Pros',
           'Follow-ups',
-          'Map',
           'More',
         ]) {
           expect(find.text(label), findsOneWidget, reason: 'at $size');
@@ -165,10 +138,10 @@ void main() {
   );
 }
 
-/// A bounded stand-in for `pumpAndSettle`. The Map tab's indeterminate
-/// progress indicator animates forever while it is loaded-but-inactive, so
-/// waiting for "no more frames scheduled" never finishes; a fixed number of
-/// pumps is enough for the shell's actual (finite) transition animations.
+/// A bounded stand-in for `pumpAndSettle`. A loaded-but-inactive tab can keep
+/// an indeterminate progress indicator animating, so waiting for "no more
+/// frames scheduled" never finishes; a fixed number of pumps is enough for the
+/// shell's actual (finite) transition animations.
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 6; i++) {
     await tester.pump(const Duration(milliseconds: 50));
@@ -178,10 +151,6 @@ Future<void> _settle(WidgetTester tester) async {
 Future<Widget> _shellHarness() async {
   final api = fakeApiClient({
     '/employees/directory': (_) => <Map<String, dynamic>>[],
-    '/contacts/map': (_) => {
-      'items': [contactPinJson(id: 1, name: 'Amina')],
-      'total': 1,
-    },
     // One list endpoint serves consumers (Contacts, Follow-ups) and partners
     // (Professionals); the query says which.
     '/contacts': (uri) => uri.queryParameters['contact_type'] == 'partner'
@@ -198,17 +167,11 @@ Future<Widget> _shellHarness() async {
     '/contacts/stage-types': (_) => [
       stageJson(id: 'new', label: 'New', orderIndex: 0),
     ],
-    '/staff/locations/live': (_) => {'staff': <Map<String, dynamic>>[]},
-    '/sales': (_) => pageOf([]),
   });
 
   final session = SessionViewModel(
     auth: FakeAuthService(),
     api: api,
-    tracking: LocationTrackingService(
-      LocationApiService(api),
-      NoopLocationQueue(),
-    ),
   );
   await session.adopt(
     const AuthSession(
@@ -232,8 +195,6 @@ Future<Widget> _shellHarness() async {
       Provider<StaffDirectoryService>(
         create: (_) => StaffDirectoryService(api),
       ),
-      Provider<LocationApiService>(create: (_) => LocationApiService(api)),
-      Provider<SalesService>(create: (_) => SalesService(api)),
     ],
     child: MaterialApp(theme: AppTheme.build(), home: const ShellScreen()),
   );

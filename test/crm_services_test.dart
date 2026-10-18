@@ -5,9 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/models/contact.dart';
-import 'package:ogera_crm_mobile/models/followup.dart';
 import 'package:ogera_crm_mobile/models/professional.dart';
-import 'package:ogera_crm_mobile/models/sale.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 
 import 'test_helpers.dart';
@@ -757,7 +755,7 @@ void main() {
       await FollowupsService(server.api).addRemark(1, 'Will order Friday');
 
       expect(server.bodyOf('POST', '/contacts/1/activities'), {
-        'type': 'internal_note',
+        'activity_type': 'internal_note',
         'notes': 'Will order Friday',
       });
     });
@@ -779,129 +777,6 @@ void main() {
       await expectLater(
         service.updateStage('won', label: 'Closed'),
         throwsA(isA<ApiException>()),
-      );
-    });
-  });
-
-  group('SalesService', () {
-    test('list maps the register and its paging', () async {
-      final server = FakeServer({
-        'GET /sales': (_) => {
-          'items': [
-            {
-              'id': 3,
-              'purchase_date': '2026-09-01',
-              'name': 'Buyer One',
-              'phone': '9947270717',
-              'address': 'Feroke',
-              'purchased_product': '500 LTR Tank',
-              'created_at': '2026-09-02T10:00:00',
-            },
-          ],
-          'total': 45,
-          'skip': 20,
-          'limit': 20,
-        },
-      });
-
-      final page = await SalesService(server.api).list(
-        query: 'buyer',
-        startDate: '2026-09-01',
-        endDate: '2026-09-30',
-        page: 2,
-      );
-
-      final query = server.calls.single.url.queryParameters;
-      expect(query['search'], 'buyer');
-      expect(query['purchased_from'], '2026-09-01');
-      expect(query['purchased_to'], '2026-09-30');
-      expect(query['skip'], '20');
-      expect(page.total, 45);
-      expect(page.page, 2);
-      expect(page.totalPages, 3);
-      final sale = page.sales.single;
-      expect(sale.buyerName, 'Buyer One');
-      expect(sale.buyerPhone, '9947270717');
-      expect(sale.saleDate, '2026-09-01');
-      expect(sale.tankSize, '500 LTR Tank');
-      expect(sale.address, 'Feroke');
-    });
-
-    test('create and update send the register columns', () async {
-      final server = FakeServer({
-        'POST /sales': (_) =>
-            _json(201, {'id': 1, 'name': 'Buyer', 'phone': '9'}),
-        'PUT /sales/1': (_) => {'id': 1, 'name': 'Buyer 2', 'phone': '9'},
-        'DELETE /sales/1': (_) => http.Response('', 204),
-      });
-      final service = SalesService(server.api);
-      final draft = SaleDraft(
-        saleDate: '2026-09-01',
-        buyerName: ' Buyer ',
-        buyerPhone: '9947270717',
-        address: 'Feroke',
-        tankSize: '500 LTR Tank',
-      );
-
-      await service.create(draft);
-      final updated = await service.update(1, draft);
-      await service.delete(1);
-
-      expect(server.bodyOf('POST', '/sales'), {
-        'purchase_date': '2026-09-01',
-        'name': 'Buyer',
-        'phone': '9947270717',
-        'address': 'Feroke',
-        'purchased_product': '500 LTR Tank',
-      });
-      expect(updated.buyerName, 'Buyer 2');
-      expect(server.to('DELETE', '/sales/1'), hasLength(1));
-    });
-
-    test('products turn plain names into options', () async {
-      final server = FakeServer({
-        'GET /sales/products': (_) => ['200 LTR Tank', '500 LTR Tank'],
-      });
-      final products = await SalesService(server.api).products();
-      expect(products.map((p) => p.name), ['200 LTR Tank', '500 LTR Tank']);
-      expect(products.map((p) => p.id), [1, 2]);
-    });
-
-    test('search is a short list query; referrals make no request', () async {
-      final server = FakeServer({
-        'GET /sales': (_) => {
-          'items': [
-            {'id': 1, 'name': 'Found', 'phone': '9'},
-          ],
-          'total': 1,
-          'skip': 0,
-          'limit': 10,
-        },
-      });
-      final service = SalesService(server.api);
-
-      expect((await service.search('fou')).single.buyerName, 'Found');
-      expect(server.calls.single.url.queryParameters['limit'], '10');
-
-      expect(await service.referrals(1), isEmpty);
-      expect(server.calls, hasLength(1));
-    });
-
-    test('a non-manager write is refused with the server message', () async {
-      final server = FakeServer({
-        'POST /sales': (_) => _json(403, {
-          'detail': 'You do not have permission to perform this action',
-        }),
-      });
-      await expectLater(
-        SalesService(server.api).create(SaleDraft(buyerName: 'x')),
-        throwsA(
-          isA<ApiException>().having(
-            (e) => e.kind,
-            'kind',
-            FailureKind.forbidden,
-          ),
-        ),
       );
     });
   });
