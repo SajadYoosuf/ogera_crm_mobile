@@ -208,7 +208,10 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
               title: 'Site details',
               icon: Icons.water_drop_outlined,
               children: [
-                DetailRow(label: 'House stage', value: contact.houseStage),
+                DetailRow(
+                  label: 'House stage',
+                  value: CrmOptions.houseStageLabel(contact.houseStage),
+                ),
                 DetailRow(label: 'Current tank', value: contact.currentTank),
                 DetailRow(label: 'Water source', value: contact.waterSource),
                 DetailRow(

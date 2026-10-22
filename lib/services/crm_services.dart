@@ -1,4 +1,5 @@
 import '../core/network/api_client.dart';
+import '../core/reference/crm_options.dart';
 import '../core/utils/formatters.dart';
 import '../models/contact.dart';
 import '../models/followup.dart';
@@ -75,11 +76,59 @@ Future<List<Map<String, dynamic>>> _fetchAll(
   return rows;
 }
 
+/// Dropdown options an admin manages in Settings > Lists & Options, read from
+/// `GET /settings/enums/{category}`. Each category is fetched once per
+/// [ApiClient] and kept, like [LeadSourceCatalog].
+class SettingsOptionsCatalog {
+  SettingsOptionsCatalog._(this._api);
+
+  static final _catalogs = Expando<SettingsOptionsCatalog>(
+    'SettingsOptionsCatalog',
+  );
+
+  factory SettingsOptionsCatalog.of(ApiClient api) =>
+      _catalogs[api] ??= SettingsOptionsCatalog._(api);
+
+  final ApiClient _api;
+  final _byCategory = <String, Map<String, String>>{};
+
+  /// Active options of [category] in Settings order, as {value: label}.
+  /// Falls back to [fallback] when the request fails or returns nothing, so a
+  /// picker is never empty. A failed load is not cached; the next call retries.
+  Future<Map<String, String>> options(
+    String category, {
+    required Map<String, String> fallback,
+  }) async {
+    final cached = _byCategory[category];
+    if (cached != null) return cached;
+    try {
+      final rows = asList(await _api.get('/settings/enums/$category'));
+      final loaded = <String, String>{
+        for (final row in rows)
+          if (asText(row['value']) != null)
+            asText(row['value'])!:
+                asText(row['label']) ?? asText(row['value'])!,
+      };
+      if (loaded.isEmpty) return fallback;
+      return _byCategory[category] = loaded;
+    } on Exception {
+      return fallback;
+    }
+  }
+}
+
 class ContactsService {
-  ContactsService(this._api) : _sources = LeadSourceCatalog.of(_api);
+  ContactsService(this._api)
+    : _sources = LeadSourceCatalog.of(_api),
+      _options = SettingsOptionsCatalog.of(_api);
 
   final ApiClient _api;
   final LeadSourceCatalog _sources;
+  final SettingsOptionsCatalog _options;
+
+  /// House stages for the contact form, as {stored value: label}.
+  Future<Map<String, String>> houseStages() =>
+      _options.options('house_stage', fallback: CrmOptions.defaultHouseStages);
 
   /// Mobile contacts are the API's consumers; [type] picks lead vs awareness
   /// through the consumer profile's `awareness_mode`.

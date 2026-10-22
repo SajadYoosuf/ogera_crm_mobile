@@ -104,7 +104,7 @@ void main() {
           ..source = 'showroom'
           ..district = 'Malappuram'
           ..address = 'Near the bus stand'
-          ..houseStage = 'Ready';
+          ..houseStage = 'ready';
 
         final saved = await viewModel.save();
 
@@ -120,7 +120,7 @@ void main() {
         expect(recorder.posted, containsPair('lead_source_id', 4));
         expect(recorder.posted!['consumer_profile'], {
           'awareness_mode': 0,
-          'house_stage': 'Ready',
+          'house_stage': 'ready',
         });
         // Coordinates are only allowed with the Offline source.
         expect(recorder.posted!.containsKey('latitude'), isFalse);

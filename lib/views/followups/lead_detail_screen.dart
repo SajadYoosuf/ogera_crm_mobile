@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/reference/crm_options.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/launchers.dart';
 import '../../core/widgets/form_fields.dart';
@@ -633,7 +634,10 @@ class _LeadDetails extends StatelessWidget {
           DetailRow(label: 'Panchayath', value: lead.panchayath),
           DetailRow(label: 'Ward', value: lead.ward),
           DetailRow(label: 'District', value: lead.district),
-          DetailRow(label: 'House stage', value: lead.houseStage),
+          DetailRow(
+            label: 'House stage',
+            value: CrmOptions.houseStageLabel(lead.houseStage),
+          ),
           DetailRow(label: 'Current tank', value: lead.currentTank),
           DetailRow(label: 'Water source', value: lead.waterSource),
           DetailRow(label: 'Tank interest', value: lead.tankSizeInterest),

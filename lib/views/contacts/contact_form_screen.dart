@@ -59,6 +59,13 @@ class _ContactFormViewState extends State<_ContactFormView> {
   ReferralChoice? _referral;
 
   @override
+  void initState() {
+    super.initState();
+    // House stages come from Settings; the default list shows until they load.
+    _viewModel.loadHouseStages();
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
@@ -236,25 +243,38 @@ class _ContactFormViewState extends State<_ContactFormView> {
               OgeraPickerField(
                 label: 'House stage',
                 icon: Icons.home_work_outlined,
-                value: draft.houseStage,
+                // The draft holds the stored value ("under_construction"); show its label.
+                value: draft.houseStage == null
+                    ? null
+                    : CrmOptions.houseStageLabel(
+                        draft.houseStage,
+                        viewModel.houseStages,
+                      ),
                 placeholder: 'Not recorded',
                 onClear: () => setState(() => draft.houseStage = null),
                 onTap: () async {
+                  final current = draft.houseStage;
+                  // A stage hidden in Settings stays pickable on the record that already has it.
+                  final options = [
+                    ...viewModel.houseStages.keys,
+                    if (current != null &&
+                        current.isNotEmpty &&
+                        !viewModel.houseStages.containsKey(current))
+                      current,
+                  ];
                   final picked = await showOptionPicker<String>(
                     context,
                     title: 'House stage',
-                    options: CrmOptions.houseStageBases,
-                    labelOf: (value) => value,
-                    selected: CrmOptions.baseOfHouseStage(draft.houseStage),
+                    options: options,
+                    labelOf: (value) => CrmOptions.houseStageLabel(
+                      value,
+                      viewModel.houseStages,
+                    ),
+                    selected: current,
                     searchable: false,
                   );
                   if (picked != null) {
-                    setState(
-                      () => draft.houseStage = CrmOptions.composeHouseStage(
-                        picked,
-                        null,
-                      ),
-                    );
+                    setState(() => draft.houseStage = picked);
                   }
                 },
               ),

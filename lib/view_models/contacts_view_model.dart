@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
+import '../core/reference/crm_options.dart';
 import '../models/contact.dart';
 import '../services/crm_services.dart';
 
@@ -210,6 +211,16 @@ class ContactFormViewModel extends ChangeNotifier {
   bool get isEditing => _existing != null;
   bool get isSaving => _isSaving;
   String? get error => _error;
+
+  /// House stage options from Settings, as {stored value: label}. The draft
+  /// keeps the stored value; the form shows the label.
+  Map<String, String> houseStages = CrmOptions.defaultHouseStages;
+
+  /// Loads the Settings list once the form opens, then redraws the form.
+  Future<void> loadHouseStages() async {
+    houseStages = await _service.houseStages();
+    notifyListeners();
+  }
 
   String? validatePhone(String? value) {
     final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');

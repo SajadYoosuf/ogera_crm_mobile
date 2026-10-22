@@ -47,10 +47,7 @@ void main() {
         return http.Response('Not found', 404);
       }),
     );
-    final session = SessionViewModel(
-      auth: FakeAuthService(),
-      api: api,
-    );
+    final session = SessionViewModel(auth: FakeAuthService(), api: api);
     await session.adopt(
       const AuthSession(
         accessToken: 'token',
@@ -109,7 +106,7 @@ void main() {
     expect(payload, containsPair('address', 'Near the bus stand'));
     expect(payload!['consumer_profile'], {
       'awareness_mode': 0,
-      'house_stage': 'Ready',
+      'house_stage': 'ready',
     });
     // The campaign section is gone: the API has nowhere to store it.
     expect(find.text('Campaign target'), findsNothing);
@@ -126,10 +123,7 @@ void main() {
         return http.Response(jsonEncode([]), 200);
       }),
     );
-    final session = SessionViewModel(
-      auth: FakeAuthService(),
-      api: api,
-    );
+    final session = SessionViewModel(auth: FakeAuthService(), api: api);
     await session.adopt(
       const AuthSession(
         accessToken: 'token',
@@ -189,10 +183,7 @@ void main() {
         return http.Response(jsonEncode([]), 200);
       }),
     );
-    final session = SessionViewModel(
-      auth: FakeAuthService(),
-      api: api,
-    );
+    final session = SessionViewModel(auth: FakeAuthService(), api: api);
     await tester.pumpWidget(
       MultiProvider(
         providers: [

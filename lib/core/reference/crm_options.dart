@@ -25,32 +25,25 @@ class CrmOptions {
     _ => value,
   };
 
-  /// House stage is stored as free text, but "Under Construction" carries a
-  /// phase suffix, so the form composes it the same way the web form does.
-  static const houseStageBases = <String>[
-    'Under Construction',
-    'Ready',
-    'Renovation',
-  ];
-  static const constructionPhases = <String>[
-    'Structure',
-    'Plastering',
-    'Finishing',
-  ];
+  /// House stages live in Settings > Lists & Options on the web
+  /// (`GET /settings/enums/house_stage`). The API stores the value
+  /// ("under_construction"); people see the label ("Under construction").
+  /// This is the server's default list, used until the real one loads or when
+  /// the phone is offline.
+  static const defaultHouseStages = <String, String>{
+    'ready': 'Ready',
+    'under_construction': 'Under construction',
+    'renovation': 'Renovation',
+  };
 
-  static String composeHouseStage(String base, String? phase) =>
-      base == 'Under Construction' ? '$base - ${phase ?? 'Structure'}' : base;
-
-  static String baseOfHouseStage(String? value) {
+  /// A readable label for a stored house stage. Values the admin added later
+  /// read as their words: "site_ready" -> "Site ready".
+  static String houseStageLabel(String? value, [Map<String, String>? labels]) {
     if (value == null || value.isEmpty) return '';
-    return value.startsWith('Under Construction')
-        ? 'Under Construction'
-        : value;
-  }
-
-  static String phaseOfHouseStage(String? value) {
-    if (value == null || !value.contains(' - ')) return 'Structure';
-    return value.split(' - ').last;
+    final known = (labels ?? defaultHouseStages)[value];
+    if (known != null) return known;
+    final words = value.replaceAll('_', ' ').trim();
+    return words.isEmpty ? value : words[0].toUpperCase() + words.substring(1);
   }
 
   static const awarenessLevels = <String>[
