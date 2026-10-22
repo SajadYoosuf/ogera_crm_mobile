@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../core/utils/launchers.dart';
 import '../theme/ogera_colors.dart';
+import '../view_models/forgot_password_view_model.dart';
 import '../view_models/login_view_model.dart';
 import '../view_models/session_view_model.dart';
+import 'forgot_password_screen.dart';
 
 /// Login screen — redesigned to match the Ogera brand identity.
 ///
@@ -97,13 +99,15 @@ class _LoginScreenState extends State<LoginScreen> {
     await context.read<SessionViewModel>().adopt(session);
   }
 
-  void _showForgotPasswordDialog() {
-    _showErrorDialog(
-      icon: Icons.lock_reset_rounded,
-      iconColor: OgeraColors.forest,
-      title: 'Forgot your password?',
-      body: 'Ask your workspace administrator to reset your password.',
-      action: 'Got it',
+  void _showForgotPasswordPage() {
+    // Reset ViewModel state so the screen always starts at the email step,
+    // even if the user previously navigated mid-flow.
+    context.read<ForgotPasswordViewModel>().reset();
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => const ForgotPasswordScreen(),
+      ),
     );
   }
 
@@ -186,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onToggleLang: () =>
                         setState(() => _showMalayalam = !_showMalayalam),
                     onSubmit: _submit,
-                    onForgotPassword: _showForgotPasswordDialog,
+                    onForgotPassword: _showForgotPasswordPage,
                     onWhatsApp: () => Launchers.whatsapp(
                       context,
                       '9847012345',

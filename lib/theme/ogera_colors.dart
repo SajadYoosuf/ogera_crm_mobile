@@ -15,10 +15,15 @@ class OgeraColors {
   static const blueSoft = Color(0xFFE7F1F9);
   static const blueDeep = Color(0xFF0E568C);
 
-  /// Login screen hero background — deep forest green matching the brand design.
-  static const forest = Color(0xFF1B3828);
-  /// Bright accent used for the Malayalam tagline text on the forest background.
-  static const forestAccent = Color(0xFF3DD68C);
+  /// Login/forgot-password hero background — deep forest green matching the web
+  /// design system's `brand-deep-green` token (#0E4D3A).
+  static const forest = Color(0xFF0E4D3A);
+  /// Bright accent used for Malayalam tagline text on the forest background.
+  /// Matches web design system's light-green text on dark (#7EE2A8).
+  static const forestAccent = Color(0xFF7EE2A8);
+  /// Primary interactive green — buttons, links, focus rings.
+  /// Matches web design system's `accent-green` token (#0E7A4F).
+  static const forestInteractive = Color(0xFF0E7A4F);
 
   static const success = Color(0xFF16A34A);
   static const warning = Color(0xFFD97706);

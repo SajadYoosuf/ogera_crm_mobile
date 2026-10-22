@@ -6,7 +6,9 @@ import 'core/network/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/crm_services.dart';
 import 'services/geocoding_service.dart';
+import 'services/password_reset_service.dart';
 import 'theme/app_theme.dart';
+import 'view_models/forgot_password_view_model.dart';
 import 'view_models/login_view_model.dart';
 import 'view_models/session_view_model.dart';
 import 'views/root_router.dart';
@@ -59,6 +61,13 @@ class OgeraCrmApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<LoginViewModel>(
           create: (context) => LoginViewModel(context.read<AuthService>()),
+        ),
+        Provider<PasswordResetService>(
+          create: (context) => PasswordResetService(context.read<ApiClient>()),
+        ),
+        ChangeNotifierProvider<ForgotPasswordViewModel>(
+          create: (context) =>
+              ForgotPasswordViewModel(context.read<PasswordResetService>()),
         ),
       ],
       child: MaterialApp(
