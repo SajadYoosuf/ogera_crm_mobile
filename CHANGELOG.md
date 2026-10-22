@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-22 — `fce4d1f` (branch `phase1-redesign`)
+
+**feat: house stage and tank type lists move to Settings**
+
+Author: sajad yoosuf
+Previous commit on this side: `2d48eca` docs: update changelog for the commits from 946afa4 to 9cfef38 (2026-10-18)
+
+### Summary
+The contact form loads house stages from Settings (`GET /settings/enums/house_stage`) and sends the stored value; detail screens show the label. Before this, the app sent labels the backend rejected (422). Notes: [docs/changes/2026-10-22-house-stage-tank-type-settings.md](docs/changes/2026-10-22-house-stage-tank-type-settings.md).
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| Modified | `lib/services/crm_services.dart` | `SettingsOptionsCatalog` reads a Settings list once per API client, with an offline fallback; `ContactsService.houseStages()` |
+| Modified | `lib/view_models/contacts_view_model.dart` | `ContactFormViewModel.loadHouseStages()` |
+| Modified | `lib/views/contacts/contact_form_screen.dart` | Picker offers the Settings list, stores the value, shows the label |
+| Modified | `lib/core/reference/crm_options.dart` | `defaultHouseStages` and `houseStageLabel` replace the base/phase helpers |
+| Modified | `lib/views/contacts/contact_detail_screen.dart` | Shows the house stage label |
+| Modified | `lib/views/followups/lead_detail_screen.dart` | Shows the house stage label |
+| Modified | `test/contact_form_screen_test.dart` | Expects the stored value `ready` |
+| Modified | `test/contact_form_view_model_test.dart` | Expects the stored value `ready` |
+| Added | `docs/changes/2026-10-22-house-stage-tank-type-settings.md` | Change notes |
+
+### Notes
+- `flutter test`: 113 passed. `flutter analyze`: no new issues. No tank type field in the app yet.
+- The same commit touched backend and web.
+
 ## 2026-10-18 — `9cfef38` (branch `phase1-redesign`)
 
 **feat: mobile app follows the rule 9 scope and the current contacts flow**
