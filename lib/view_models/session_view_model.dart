@@ -72,6 +72,12 @@ class SessionViewModel extends ChangeNotifier {
     _set(SessionStatus.signedOut);
   }
 
+  /// Sets an expiry notice directly. Use in tests only.
+  @visibleForTesting
+  void setExpiryNotice(String notice) {
+    _expiryNotice = notice;
+  }
+
   void consumeExpiryNotice() {
     if (_expiryNotice == null) return;
     _expiryNotice = null;
