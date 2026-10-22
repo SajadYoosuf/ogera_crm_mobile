@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-10-23 — `c1e94b5` (branch `version1`)
+
+**test(mobile/login): full unit, widget, and integration test suite for login screen**
+
+Author: sajad yoosuf
+Previous commit on this side: `a5db5e7` feat(mobile/splash): redesign splash screen with channel source badges (2026-10-22)
+
+### Summary
+Adds 54 tests across three layers for the login feature. Unit tests cover
+every validation rule, state transition, and edge case in `LoginViewModel`.
+Widget tests verify the real screen renders correctly, shows spinners,
+and shows error dialogs. Integration tests wire the full stack (screen →
+view model → real `AuthService` → mock HTTP) to prove each backend scenario
+produces the right UI outcome. Four screen sizes are checked for overflow.
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| Modified | `lib/view_models/session_view_model.dart` | Added `@visibleForTesting setExpiryNotice()` so the session-expired dialog can be triggered in tests without a real 401 |
+| Added | `test/login_screen_test.dart` | 27 new widget + integration tests — see commit body for full list |
+| Modified | `test/login_view_model_test.dart` | Expanded from 5 to 26 unit tests — identifier/password validation, state machine, error clearing, visibility toggle, trimming |
+
+### Notes
+- `flutter analyze`: 0 errors. `flutter test`: 54/54 passed.
+- Only the mobile side changed. No backend or web changes.
+- `login_screen_test.dart` is scoped to **login only** — forgot-password
+  and WhatsApp links are present in the UI but not tested here.
+- One behavioural note discovered during testing: inline validation errors
+  only auto-clear (via `AutovalidateMode.onUserInteraction`) AFTER the
+  first `viewModel.signIn()` call succeeds in reaching the service. An
+  empty-form tap blocks the call, so errors from that tap persist until
+  the user submits again with valid-format credentials.
+
 ## 2026-10-22 — `5f9f810` (branch `version1`)
 
 **feat(mobile): staff-only login, simplified home, remove staff directory**
