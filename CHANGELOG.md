@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-10-22 — `5f9f810` (branch `version1`)
+
+**feat(mobile): staff-only login, simplified home, remove staff directory**
+
+Author: sajad yoosuf
+Previous commit on this side: `e2f5919` fix(mobile/icons): shrink adaptive icon foreground to center (2026-10-22)
+
+### Summary
+The mobile app is now for sales staff only (sales executive, tele-caller,
+field executive, team lead, support). Admin and manager accounts are blocked
+at sign-in with a clear message to use the web portal instead. The old
+"Head tab / Staff tab" split on the login screen is removed — one form
+for everyone, role check happens after the API responds. The home screen is
+simplified so every role sees "My day" (overdue + today's follow-ups). The
+staff directory screen (only visible to head roles) is deleted.
+See [docs/changes/2026-10-22-staff-only-login.md](docs/changes/2026-10-22-staff-only-login.md).
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| Modified | `assets/images/ogera-symbol-foreground.png` | Updated app symbol image used in the adaptive icon |
+| Added | `docs/changes/2026-10-22-staff-only-login.md` | Change notes for this feature |
+| Modified | `ios/Runner.xcodeproj/project.pbxproj` | iOS project file — updated for new icon assets |
+| Modified | `ios/Runner/Info.plist` | iOS app metadata — minor settings update |
+| Modified | `lib/core/config/app_config.dart` | `_debugUrl` changed to `http://10.0.2.2:8000` — this is the correct address to reach your PC's local server from inside the Android Emulator |
+| Modified | `lib/models/auth_session.dart` | Removed `LoginScope` enum — this was the Head/Staff tab concept; no longer needed since the app is staff-only |
+| Modified | `lib/services/auth_service.dart` | `signIn` no longer takes a `scope` parameter; the staff-only role check is now inside the service itself; added `signInForTest` for e2e tests; added a `kDebugMode` print that logs email and password during local development |
+| Modified | `lib/theme/ogera_colors.dart` | Added colour tokens (`ink`, `line`, `muted`) used by the new login screen |
+| Modified | `lib/view_models/login_view_model.dart` | Removed `scope` parameter; the identifier field now accepts a phone number or email address |
+| Modified | `lib/views/home/home_tab.dart` | Removed the `_HeadHome` pipeline overview widget — every role now sees `_StaffHome` ("My day") |
+| Modified | `lib/views/login_screen.dart` | Redesigned to a single form with no tabs; "Login" button; removed unused `_LangToggle` widget |
+| Modified | `lib/views/more/more_tab.dart` | Removed the "Staff directory" menu item that appeared only for head users |
+| Deleted | `lib/views/more/staff_directory_screen.dart` | This screen listed all employees who can be assigned work; deleted because it was only for admin/manager who now use the web portal |
+| Modified | `test/auth_service_test.dart` | Updated tests to match new `signIn` signature |
+| Modified | `test/e2e/mobile_backend_e2e_test.dart` | Updated to use `signInForTest` where admin credentials are needed |
+| Modified | `test/login_view_model_test.dart` | Added `signInForTest` to the fake auth service; tests now check the identifier field label |
+| Modified | `test/test_helpers.dart` | `FakeAuthService` updated — removed `LoginScope scope` from `signIn`, added `signInForTest` stub |
+| Modified | `test/widget_test.dart` | Updated widget tests to match the new single-form login screen; checks for "Mobile number or email" field and "Login" button |
+
+### Notes
+- `flutter analyze`: 0 errors, 2 pre-existing warnings (unrelated to this change).
+- Only the mobile side changed in this commit.
+
 ## 2026-10-22 — `fce4d1f` (branch `phase1-redesign`)
 
 **feat: house stage and tank type lists move to Settings**
