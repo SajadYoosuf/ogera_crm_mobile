@@ -5,12 +5,13 @@ import '../services/auth_service.dart';
 
 enum LoginStatus { idle, submitting, error }
 
+/// Holds login form state for the staff-only login screen.
+/// Admin/manager accounts are blocked at sign-in — they must use the web portal.
 class LoginViewModel extends ChangeNotifier {
   LoginViewModel(this._authService);
 
   final AuthService _authService;
 
-  LoginScope _scope = LoginScope.head;
   String _email = '';
   String _password = '';
   bool _hasAttemptedSubmit = false;
@@ -19,21 +20,12 @@ class LoginViewModel extends ChangeNotifier {
   String? _message;
   AuthSession? _session;
 
-  LoginScope get scope => _scope;
   bool get hasAttemptedSubmit => _hasAttemptedSubmit;
   bool get obscurePassword => _obscurePassword;
   bool get isSubmitting => _status == LoginStatus.submitting;
   bool get hasError => _status == LoginStatus.error;
   String? get message => _message;
   AuthSession? get session => _session;
-
-  void selectScope(LoginScope scope) {
-    if (_scope == scope) return;
-    _scope = scope;
-    _message = null;
-    _status = LoginStatus.idle;
-    notifyListeners();
-  }
 
   void updateEmail(String value) {
     _email = value.trim();
@@ -50,11 +42,15 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Accepts a mobile number (digits, spaces, +, -) or an email address,
+  /// since the login field now says "Mobile number or email".
   String? validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return 'Enter the email for your workspace.';
-    if (!email.contains('@') || !email.contains('.')) {
-      return 'Enter a valid email address.';
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Enter your mobile number or email.';
+    final isPhone = RegExp(r'^[\d\s+\-]{7,}$').hasMatch(v);
+    final isEmail = v.contains('@') && v.contains('.');
+    if (!isPhone && !isEmail) {
+      return 'Enter a valid mobile number or email address.';
     }
     return null;
   }
@@ -80,7 +76,6 @@ class LoginViewModel extends ChangeNotifier {
       _session = await _authService.signIn(
         email: _email,
         password: _password,
-        scope: _scope,
       );
       _status = LoginStatus.idle;
       notifyListeners();
@@ -94,12 +89,6 @@ class LoginViewModel extends ChangeNotifier {
     }
     notifyListeners();
     return null;
-  }
-
-  void requestPasswordHelp() {
-    _status = LoginStatus.idle;
-    _message = 'Ask your workspace administrator to reset your password.';
-    notifyListeners();
   }
 
   void showNotice(String notice) {

@@ -15,6 +15,11 @@ class OgeraColors {
   static const blueSoft = Color(0xFFE7F1F9);
   static const blueDeep = Color(0xFF0E568C);
 
+  /// Login screen hero background — deep forest green matching the brand design.
+  static const forest = Color(0xFF1B3828);
+  /// Bright accent used for the Malayalam tagline text on the forest background.
+  static const forestAccent = Color(0xFF3DD68C);
+
   static const success = Color(0xFF16A34A);
   static const warning = Color(0xFFD97706);
   static const danger = Color(0xFFDC2626);

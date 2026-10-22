@@ -5,8 +5,6 @@ import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/session_view_model.dart';
 import 'profile_screen.dart';
-import 'staff_directory_screen.dart';
-import '../shell_scope.dart';
 
 /// Everything that does not earn a permanent tab.
 ///
@@ -42,25 +40,6 @@ class MoreTab extends StatelessWidget {
             ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
           ),
           const SizedBox(height: 22),
-
-          if (user.isHead) ...[
-            const SectionHeader(title: 'Team', icon: Icons.groups_outlined),
-            _MenuGroup(
-              items: [
-                _MenuItem(
-                  icon: Icons.badge_outlined,
-                  color: OgeraColors.blue,
-                  label: 'Staff directory',
-                  caption: 'Everyone who can be assigned work',
-                  onTap: () => pushShellRoute<void>(
-                    context,
-                    (_) => const StaffDirectoryScreen(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-          ],
 
           const SectionHeader(
             title: 'Account',

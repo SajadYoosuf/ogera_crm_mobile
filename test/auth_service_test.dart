@@ -25,6 +25,7 @@ Map<String, dynamic> _loginReply({
   },
 };
 
+// Builds an AuthService backed by a mock HTTP client.
 AuthService _serviceReplying(
   http.Response Function(http.Request request) reply, {
   _MemorySessionStore? store,
@@ -59,7 +60,6 @@ void main() {
     final session = await service.signIn(
       email: 'sam@ogera.com',
       password: 'password',
-      scope: LoginScope.staff,
     );
 
     expect(session.user.name, 'Sam Ogera');
@@ -82,11 +82,7 @@ void main() {
       final service = _serviceReplying(
         (_) => http.Response(jsonEncode(_loginReply(id: 1, role: role)), 200),
       );
-      final session = await service.signIn(
-        email: 'a@b.com',
-        password: 'x',
-        scope: LoginScope.staff,
-      );
+      final session = await service.signIn(email: 'a@b.com', password: 'x');
       expect(session.user.role, UserRole.salesStaff, reason: role);
       expect(session.user.isStaff, isTrue);
     }
@@ -96,14 +92,16 @@ void main() {
     final service = _serviceReplying(
       (_) => http.Response(jsonEncode(_loginReply(id: 1, role: 'support')), 200),
     );
-    final session = await service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff);
+    final session = await service.signIn(email: 'a@b.com', password: 'x');
     expect(session.user.role, UserRole.support);
     expect(session.user.isStaff, isTrue);
     expect(session.user.role.canMoveStage, isFalse);
     expect(UserRole.salesStaff.canMoveStage, isTrue);
   });
 
-  test('admin and manager are the Head audience', () async {
+  // The mobile app is staff-only. Admin and manager accounts belong in the
+  // Ogera web portal. Attempting to sign in on mobile must fail with STAFF_ONLY.
+  test('admin and manager are rejected with STAFF_ONLY', () async {
     for (final entry in {
       'admin': UserRole.admin,
       'manager': UserRole.salesHead,
@@ -112,17 +110,21 @@ void main() {
         (_) =>
             http.Response(jsonEncode(_loginReply(id: 2, role: entry.key)), 200),
       );
-      final session = await service.signIn(
-        email: 'a@b.com',
-        password: 'x',
-        scope: LoginScope.head,
+      await expectLater(
+        service.signIn(email: 'a@b.com', password: 'x'),
+        throwsA(
+          isA<AuthException>().having(
+            (error) => error.code,
+            'code',
+            'STAFF_ONLY',
+          ),
+        ),
+        reason: entry.key,
       );
-      expect(session.user.role, entry.value);
-      expect(session.user.isHead, isTrue);
     }
   });
 
-  test('refuses a head account signing in on the staff tab', () async {
+  test('a rejected head account must not leave a usable session behind', () async {
     final store = _MemorySessionStore();
     final service = _serviceReplying(
       (_) => http.Response(
@@ -133,40 +135,11 @@ void main() {
     );
 
     await expectLater(
-      service.signIn(
-        email: 'lead@ogera.com',
-        password: 'password',
-        scope: LoginScope.staff,
-      ),
-      throwsA(
-        isA<AuthException>().having(
-          (error) => error.code,
-          'code',
-          'SCOPE_MISMATCH',
-        ),
-      ),
+      service.signIn(email: 'lead@ogera.com', password: 'password'),
+      throwsA(isA<AuthException>()),
     );
     // A rejected sign-in must not leave a usable session behind.
     expect(store.saved, isNull);
-  });
-
-  test('refuses a staff account signing in on the head tab', () async {
-    final service = _serviceReplying(
-      (_) => http.Response(
-        jsonEncode(_loginReply(id: 4, role: 'tele_caller')),
-        200,
-      ),
-    );
-    await expectLater(
-      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.head),
-      throwsA(
-        isA<AuthException>().having(
-          (error) => error.code,
-          'code',
-          'SCOPE_MISMATCH',
-        ),
-      ),
-    );
   });
 
   test('shows the server message when the credentials are wrong', () async {
@@ -178,11 +151,7 @@ void main() {
     );
 
     await expectLater(
-      service.signIn(
-        email: 'sam@ogera.com',
-        password: 'wrong',
-        scope: LoginScope.head,
-      ),
+      service.signIn(email: 'sam@ogera.com', password: 'wrong'),
       throwsA(
         isA<AuthException>().having(
           (error) => error.message,
@@ -201,7 +170,7 @@ void main() {
       ),
     );
     await expectLater(
-      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff),
+      service.signIn(email: 'a@b.com', password: 'x'),
       throwsA(
         isA<AuthException>().having(
           (error) => error.message,
@@ -222,7 +191,7 @@ void main() {
       ),
     );
     await expectLater(
-      service.signIn(email: 'a@b.com', password: 'x', scope: LoginScope.staff),
+      service.signIn(email: 'a@b.com', password: 'x'),
       throwsA(isA<AuthException>()),
     );
   });
@@ -233,10 +202,10 @@ void main() {
         accessToken: 'stored-token',
         user: AuthUser(
           id: 7,
-          email: 'head@ogera.com',
-          name: 'Head',
+          email: 'staff@ogera.com',
+          name: 'Staff User',
           phone: null,
-          role: UserRole.admin,
+          role: UserRole.salesStaff,
         ),
       );
     final api = ApiClient(baseUrl: 'https://crm.example');
@@ -256,12 +225,12 @@ void main() {
 
   test('a stored session survives the round trip through JSON', () {
     final session = AuthSession.fromLogin(
-      _loginReply(id: 9, role: 'manager', name: 'Mani'),
+      _loginReply(id: 9, role: 'sales_executive', name: 'Sam'),
     )!;
     final copy = AuthSession.fromJson(session.toJson());
     expect(copy.accessToken, 'crm-token');
     expect(copy.user.id, 9);
-    expect(copy.user.role, UserRole.salesHead);
+    expect(copy.user.role, UserRole.salesStaff);
   });
 }
 

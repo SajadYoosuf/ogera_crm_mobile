@@ -34,25 +34,6 @@ enum UserRole {
   bool get canMoveStage => this != UserRole.support;
 }
 
-/// Which login tab produced this session. The tab is a routing hint checked on
-/// the phone only: the API has no scope guard, it simply signs the employee in.
-enum LoginScope {
-  head('head', 'Head'),
-  staff('staff', 'Staff');
-
-  const LoginScope(this.id, this.label);
-
-  final String id;
-  final String label;
-
-  bool accepts(UserRole role) =>
-      this == LoginScope.head ? role.isHead : role.isStaff;
-
-  String get mismatchMessage => this == LoginScope.head
-      ? 'This is a Staff account. Use the Staff tab to sign in.'
-      : 'This is an Admin or Manager account. Use the Head tab to sign in.';
-}
-
 class AuthUser {
   const AuthUser({
     required this.id,

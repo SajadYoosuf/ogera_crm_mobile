@@ -15,9 +15,17 @@ void main() {
       expect(service.wasCalled, isFalse);
       expect(
         viewModel.validateEmail(''),
-        'Enter the email for your workspace.',
+        'Enter your mobile number or email.',
       );
       expect(viewModel.validatePassword(''), 'Enter your password.');
+    });
+
+    test('accepts a phone number or an email address as the identifier', () {
+      final viewModel = LoginViewModel(_FakeAuthService());
+      expect(viewModel.validateEmail('9847012345'), isNull);
+      expect(viewModel.validateEmail('test@email.com'), isNull);
+      expect(viewModel.validateEmail('+91 98470 12345'), isNull);
+      expect(viewModel.validateEmail('notvalid'), isNotNull);
     });
 
     test('shows a recoverable message when authentication fails', () async {
@@ -36,25 +44,24 @@ void main() {
       expect(viewModel.message, 'Incorrect email or password.');
     });
 
-    test('sends the selected tab as the login scope', () async {
+    test('signs in with valid credentials and returns a session', () async {
       final service = _FakeAuthService();
       final viewModel = LoginViewModel(service);
-      viewModel.selectScope(LoginScope.staff);
       viewModel.updateEmail('sam@ogera.com');
       viewModel.updatePassword('password');
 
       final session = await viewModel.signIn();
 
-      expect(service.receivedScope, LoginScope.staff);
+      expect(service.wasCalled, isTrue);
       expect(session, isNotNull);
     });
 
-    test('switching tabs clears a stale error message', () {
+    test('typing after an error clears the error message', () {
       final viewModel = LoginViewModel(_FakeAuthService());
       viewModel.showNotice('Your session ended. Please sign in again.');
       expect(viewModel.hasError, isTrue);
 
-      viewModel.selectScope(LoginScope.staff);
+      viewModel.updateEmail('x');
 
       expect(viewModel.message, isNull);
       expect(viewModel.hasError, isFalse);
@@ -67,16 +74,13 @@ class _FakeAuthService implements AuthService {
 
   final AuthException? error;
   bool wasCalled = false;
-  LoginScope? receivedScope;
 
   @override
   Future<AuthSession> signIn({
     required String email,
     required String password,
-    required LoginScope scope,
   }) async {
     wasCalled = true;
-    receivedScope = scope;
     final failure = error;
     if (failure != null) throw failure;
     return const AuthSession(
@@ -89,6 +93,14 @@ class _FakeAuthService implements AuthService {
         role: UserRole.salesStaff,
       ),
     );
+  }
+
+  @override
+  Future<AuthSession> signInForTest({
+    required String email,
+    required String password,
+  }) async {
+    throw UnimplementedError();
   }
 
   @override

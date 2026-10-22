@@ -34,7 +34,14 @@ class FakeAuthService implements AuthService {
   Future<AuthSession> signIn({
     required String email,
     required String password,
-    required LoginScope scope,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AuthSession> signInForTest({
+    required String email,
+    required String password,
   }) async {
     throw UnimplementedError();
   }

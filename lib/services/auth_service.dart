@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/network/api_client.dart';
@@ -72,14 +73,16 @@ class AuthService {
   final ApiClient _api;
   final SessionStore _store;
 
-  /// Signs in and verifies that the authenticated role matches the tab the user
-  /// picked. The API has no scope guard of its own, so this check is the only
-  /// one, and it runs before the token is stored.
+  /// Signs in and verifies the user is a sales-staff role.
+  /// Admin and manager accounts must use the web portal — this mobile app
+  /// is for sales executives and support staff only.
   Future<AuthSession> signIn({
     required String email,
     required String password,
-    required LoginScope scope,
   }) async {
+    if (kDebugMode) {
+      debugPrint('[AuthService] signIn → email: $email  password: $password');
+    }
     dynamic body;
     try {
       body = await _api.post(
@@ -96,10 +99,39 @@ class AuthService {
         'The server returned an invalid sign-in response.',
       );
     }
-    if (!scope.accepts(session.user.role)) {
-      throw AuthException(scope.mismatchMessage, code: 'SCOPE_MISMATCH');
+    if (!session.user.role.isStaff) {
+      throw const AuthException(
+        'This app is for sales staff only. Please use the Ogera web portal for admin and manager access.',
+        code: 'STAFF_ONLY',
+      );
     }
 
+    await _store.save(session);
+    _api.setAccessToken(session.accessToken);
+    _api.currentUserId = session.user.id;
+    return session;
+  }
+
+  /// Signs in without the staff-only guard. For e2e tests only — do not call
+  /// from app code. Use [signIn] in the app; it enforces the staff-only rule.
+  @visibleForTesting
+  Future<AuthSession> signInForTest({
+    required String email,
+    required String password,
+  }) async {
+    dynamic body;
+    try {
+      body = await _api.post(
+        '/auth/login',
+        body: {'email': email.trim(), 'password': password},
+      );
+    } on ApiException catch (error) {
+      throw AuthException(error.message, code: error.code);
+    }
+    final session = AuthSession.fromLogin(body);
+    if (session == null) {
+      throw const AuthException('Invalid sign-in response.');
+    }
     await _store.save(session);
     _api.setAccessToken(session.accessToken);
     _api.currentUserId = session.user.id;

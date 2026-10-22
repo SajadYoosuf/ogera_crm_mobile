@@ -61,12 +61,15 @@ void main() {
     return;
   }
 
-  Future<_Phone> signIn(String who, LoginScope scope) async {
+  // Signs in directly via the backend, bypassing the mobile app's staff-only
+  // guard, so e2e tests can still use admin and manager accounts to seed data
+  // and cover backend permission rules without needing a separate admin app.
+  Future<_Phone> signIn(String who) async {
     final api = ApiClient(baseUrl: baseUrl);
     final session = await AuthService(
       api,
       _MemoryStore(),
-    ).signIn(email: '$who@example.com', password: _password, scope: scope);
+    ).signInForTest(email: '$who@example.com', password: _password);
     return _Phone(api, session);
   }
 
@@ -76,14 +79,14 @@ void main() {
   late _Phone raj;
 
   setUpAll(() async {
-    admin = await signIn('admin', LoginScope.head);
-    manager = await signIn('manager', LoginScope.head);
-    anu = await signIn('anu', LoginScope.staff);
-    raj = await signIn('raj', LoginScope.staff);
+    admin = await signIn('admin');
+    manager = await signIn('manager');
+    anu = await signIn('anu');
+    raj = await signIn('raj');
   });
 
   group('sign in', () {
-    test('roles fold into the Head and Staff audiences', () {
+    test('roles are correctly mapped from the backend', () {
       expect(admin.user.role, UserRole.admin);
       expect(manager.user.role, UserRole.salesHead);
       expect(admin.user.isHead && manager.user.isHead, isTrue);
@@ -97,7 +100,6 @@ void main() {
         AuthService(ApiClient(baseUrl: baseUrl), _MemoryStore()).signIn(
           email: 'anu@example.com',
           password: 'nope',
-          scope: LoginScope.staff,
         ),
         throwsA(
           isA<AuthException>().having(
@@ -109,11 +111,14 @@ void main() {
       );
     });
 
-    test('the wrong login tab is refused', () async {
+    // The mobile app enforces staff-only: admin/manager are blocked on the
+    // mobile signIn() path. The e2e setup uses signInForTest() to bypass this.
+    test('admin and manager are blocked by the mobile app', () async {
       await expectLater(
-        signIn('anu', LoginScope.head),
+        AuthService(ApiClient(baseUrl: baseUrl), _MemoryStore())
+            .signIn(email: 'admin@example.com', password: _password),
         throwsA(
-          isA<AuthException>().having((e) => e.code, 'code', 'SCOPE_MISMATCH'),
+          isA<AuthException>().having((e) => e.code, 'code', 'STAFF_ONLY'),
         ),
       );
     });

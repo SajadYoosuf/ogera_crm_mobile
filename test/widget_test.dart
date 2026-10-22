@@ -10,42 +10,31 @@ import 'package:ogera_crm_mobile/views/login_screen.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('login offers a Head tab and a Staff tab', (tester) async {
-    await tester.pumpWidget(_harness());
-
-    expect(find.text('Head'), findsOneWidget);
-    expect(find.text('Staff'), findsOneWidget);
-    expect(find.text('Work email'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
-    // Head is selected first, so the action names that experience.
-    expect(find.text('Sign in as Head'), findsWidgets);
-  });
-
-  testWidgets('choosing the Staff tab re-labels the sign-in action', (
+  testWidgets('login screen shows identifier and password fields', (
     tester,
   ) async {
     await tester.pumpWidget(_harness());
 
-    await tester.tap(find.text('Staff'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Sign in as Staff'), findsWidgets);
-    expect(find.text('Field workspace'), findsOneWidget);
+    expect(find.text('Mobile number or email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Login'), findsOneWidget);
   });
 
   testWidgets('an empty form never reaches the service', (tester) async {
     final auth = _FakeAuthService();
     await tester.pumpWidget(_harness(auth: auth));
 
-    // The default 800x600 test viewport puts the button below the fold.
-    final signIn = find.widgetWithText(FilledButton, 'Sign in as Head');
+    final signIn = find.widgetWithText(FilledButton, 'Login');
     await tester.ensureVisible(signIn);
     await tester.pumpAndSettle();
     await tester.tap(signIn);
     await tester.pumpAndSettle();
 
     expect(auth.wasCalled, isFalse);
-    expect(find.text('Enter the email for your workspace.'), findsOneWidget);
+    expect(
+      find.text('Enter your mobile number or email.'),
+      findsOneWidget,
+    );
   });
 }
 
@@ -72,7 +61,6 @@ class _FakeAuthService implements AuthService {
   Future<AuthSession> signIn({
     required String email,
     required String password,
-    required LoginScope scope,
   }) async {
     wasCalled = true;
     return const AuthSession(
@@ -85,6 +73,14 @@ class _FakeAuthService implements AuthService {
         role: UserRole.salesStaff,
       ),
     );
+  }
+
+  @override
+  Future<AuthSession> signInForTest({
+    required String email,
+    required String password,
+  }) async {
+    throw UnimplementedError();
   }
 
   @override
