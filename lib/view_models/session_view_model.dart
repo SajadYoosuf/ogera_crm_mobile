@@ -42,7 +42,14 @@ class SessionViewModel extends ChangeNotifier {
   int get userId => user?.id ?? 0;
 
   Future<void> bootstrap() async {
-    final restored = await _auth.restore();
+    // Run session restore and the minimum splash hold in parallel.
+    // The splash stays visible until both finish, so fast restores still
+    // show the screen for at least 3 seconds.
+    final results = await Future.wait([
+      _auth.restore(),
+      Future<void>.delayed(const Duration(seconds: 3)),
+    ]);
+    final restored = results[0] as AuthSession?;
     if (restored == null) {
       _set(SessionStatus.signedOut);
       return;

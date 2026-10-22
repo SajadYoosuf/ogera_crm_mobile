@@ -12,7 +12,7 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: OgeraColors.ink,
+      backgroundColor: OgeraColors.forest,
       body: Stack(
         children: [
           Center(
@@ -35,7 +35,7 @@ class SplashScreen extends StatelessWidget {
             bottom: 0,
             child: LinearProgressIndicator(
               backgroundColor: Colors.transparent,
-              color: OgeraColors.blue,
+              color: OgeraColors.forestAccent,
               minHeight: 2,
             ),
           ),
@@ -172,7 +172,7 @@ class _Tagline extends StatelessWidget {
     return const Text(
       'No lead goes out.',
       style: TextStyle(
-        color: OgeraColors.muted,
+        color: OgeraColors.forestAccent,
         fontSize: 13,
         letterSpacing: 0.1,
       ),
