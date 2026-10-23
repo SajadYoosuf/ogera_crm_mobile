@@ -1,29 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/auth_session.dart';
 import '../services/crm_services.dart';
+import '../services/expense_service.dart';
+import '../services/home_service.dart';
 import '../theme/ogera_colors.dart';
 import '../view_models/contacts_view_model.dart';
+import '../view_models/expense_view_model.dart';
 import '../view_models/followups_view_model.dart';
+import '../view_models/home_view_model.dart';
 import '../view_models/professionals_view_model.dart';
 import '../view_models/session_view_model.dart';
 import 'contacts/contact_form_screen.dart';
 import 'contacts/contacts_tab.dart';
-import 'followups/followups_tab.dart';
 import 'home/home_tab.dart';
+import 'home/quick_action_sheets.dart';
 import 'more/more_tab.dart';
 import 'professionals/professional_form_screen.dart';
-import 'professionals/professionals_tab.dart';
+import 'shared/coming_soon_tab.dart';
 import 'shell_scope.dart';
 
-/// Bottom navigation, fixed order: Home · Contacts · Professionals ·
-/// Home · Contacts · Pros · Follow-ups · More.
+/// Signed-in shell: bottom bar, a centre-docked quick-action button, and the
+/// module view models the tabs share.
 ///
-/// The tabs are identical for both roles; what changes is what each one shows.
-/// Module view models are provided here rather than per screen so a tab keeps
-/// its scroll position, filters, and loaded pages while the user moves around —
-/// and they are torn down on sign-out, which is why they are not global.
+/// Tab order: Home · Contacts · Tasks · Pipeline · More.
+/// Tasks and Pipeline are placeholders until Sprints 2 and 3.
+///
+/// The centre button fans out three circle buttons: Add contact, Activity log,
+/// and Add expense (staff only). Module view models are provided here, not per
+/// screen, so a tab keeps its scroll position and loaded pages when the user
+/// moves around. They are torn down on sign-out, which is why they are not global.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
 
@@ -31,8 +37,36 @@ class ShellScreen extends StatefulWidget {
   State<ShellScreen> createState() => _ShellScreenState();
 }
 
-class _ShellScreenState extends State<ShellScreen> {
+class _ShellScreenState extends State<ShellScreen>
+    with SingleTickerProviderStateMixin {
   int _index = 0;
+  bool _fabOpen = false;
+
+  /// Drives the fan-out animation: 0 is closed, 1 is fully open.
+  late final AnimationController _fabController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+
+  @override
+  void dispose() {
+    _fabController.dispose();
+    super.dispose();
+  }
+
+  /// Opens or closes the fan of circle buttons, and plays the animation.
+  void _setFabOpen(bool open) {
+    if (_fabOpen == open) return;
+    setState(() => _fabOpen = open);
+    open ? _fabController.forward() : _fabController.reverse();
+  }
+
+  /// Closes the fan first, then runs the action (which opens a form or sheet),
+  /// so the sheet appears over a clean screen.
+  void _runFabAction(Future<void> Function() action) {
+    _setFabOpen(false);
+    action();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,65 +91,105 @@ class _ShellScreenState extends State<ShellScreen> {
             user,
           ),
         ),
+        ChangeNotifierProvider(
+          create: (context) => HomeViewModel(context.read<HomeService>()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => ExpenseViewModel(context.read<ExpenseService>()),
+        ),
       ],
       child: Builder(
-        builder: (context) => Scaffold(
-          body: IndexedStack(
-          index: _index,
-          children: [
-            _LazyTab(
-              active: _index == 0,
-              onActivate: () {
-                context.read<ContactsViewModel>().load();
-                context.read<FollowupsViewModel>().load();
-              },
-              child: const HomeTab(),
+        builder: (context) {
+          // Built here, under the providers, so each action can read them.
+          final actions = [
+            _FabAction(
+              label: 'Add contact',
+              icon: Icons.person_add_alt_1_rounded,
+              onTap: () => _runFabAction(() => openContactForm(context)),
             ),
-            _LazyTab(
-              active: _index == 1,
-              onActivate: () => context.read<ContactsViewModel>().load(),
-              child: const ContactsTab(),
+            _FabAction(
+              label: 'Activity log',
+              icon: Icons.history_edu_rounded,
+              onTap: () => _runFabAction(() => openActivityLog(context)),
             ),
-            _LazyTab(
-              active: _index == 2,
-              onActivate: () => context.read<ProfessionalsViewModel>().load(),
-              child: const ProfessionalsTab(),
+            // Admin and manager review expenses; the backend rejects their
+            // submissions with 403, so the button is not offered to them.
+            if (!user.isHead)
+              _FabAction(
+                label: 'Add expense',
+                icon: Icons.receipt_long_rounded,
+                onTap: () => _runFabAction(() => openExpenseAdd(context)),
+              ),
+          ];
+
+          return PopScope(
+            // Back closes the fan instead of leaving the app.
+            canPop: !_fabOpen,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _setFabOpen(false);
+            },
+            child: Scaffold(
+              body: Stack(
+                children: [
+                  IndexedStack(
+                    index: _index,
+                    children: [
+                      _LazyTab(
+                        active: _index == 0,
+                        onActivate: () {
+                          context.read<HomeViewModel>().load();
+                          context.read<FollowupsViewModel>().load();
+                        },
+                        child: const HomeTab(),
+                      ),
+                      _LazyTab(
+                        active: _index == 1,
+                        onActivate: () =>
+                            context.read<ContactsViewModel>().load(),
+                        child: const ContactsTab(),
+                      ),
+                      const ComingSoonTab(
+                        title: 'Tasks',
+                        icon: Icons.check_circle_outline_rounded,
+                      ),
+                      const ComingSoonTab(
+                        title: 'Pipeline',
+                        icon: Icons.view_kanban_outlined,
+                      ),
+                      const MoreTab(),
+                    ],
+                  ),
+                  // Dims the screen while the fan is open; tapping it closes the fan.
+                  if (_fabOpen)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _setFabOpen(false),
+                        child: const ColoredBox(color: Color(0x66000000)),
+                      ),
+                    ),
+                ],
+              ),
+              floatingActionButtonLocation:
+                  FloatingActionButtonLocation.centerDocked,
+              floatingActionButton: _ShellFab(
+                animation: _fabController,
+                open: _fabOpen,
+                onToggle: () => _setFabOpen(!_fabOpen),
+                actions: actions,
+              ),
+              bottomNavigationBar: _NavBar(
+                index: _index,
+                onChanged: (index) {
+                  _setFabOpen(false);
+                  setState(() => _index = index);
+                },
+              ),
             ),
-            _LazyTab(
-              active: _index == 3,
-              onActivate: () => context.read<FollowupsViewModel>().load(),
-              child: const FollowupsTab(),
-            ),
-            const MoreTab(),
-          ],
-          ),
-          floatingActionButton: _buildFab(context),
-          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-          bottomNavigationBar: _NavBar(
-            index: _index,
-            onChanged: (index) => setState(() => _index = index),
-          ),
-        ),
+          );
+        },
       ),
     );
-  }
-
-  /// Build context-specific FAB for each tab
-  Widget? _buildFab(BuildContext context) {
-    return switch (_index) {
-      1 => _DirectActionFab(
-        icon: Icons.person_add_alt_1_rounded,
-        tooltip: 'Add contact',
-        onPressed: () => openContactForm(context),
-      ),
-      2 => _DirectActionFab(
-        icon: Icons.handyman_rounded,
-        tooltip: 'Add professional',
-        onPressed: () => openProfessionalForm(context),
-      ),
-      0 => QuickActionFab(user: context.read<SessionViewModel>().user!),
-      _ => null,
-    };
   }
 }
 
@@ -164,6 +238,8 @@ class _LazyTabState extends State<_LazyTab> {
   Widget build(BuildContext context) => widget.child;
 }
 
+/// Bottom bar with two tabs on the left, a gap in the middle for the docked
+/// button, and three tabs on the right.
 class _NavBar extends StatelessWidget {
   const _NavBar({required this.index, required this.onChanged});
 
@@ -176,169 +252,227 @@ class _NavBar extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: OgeraColors.line)),
       ),
-      child: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: onChanged,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: 'Home',
+      child: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        padding: EdgeInsets.zero,
+        color: OgeraColors.surface,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            children: [
+              _item(
+                0,
+                Icons.dashboard_outlined,
+                Icons.dashboard_rounded,
+                'Home',
+              ),
+              _item(
+                1,
+                Icons.people_outline_rounded,
+                Icons.people_rounded,
+                'Contacts',
+              ),
+              // Space for the docked quick-action button.
+              const SizedBox(width: 72),
+              _item(
+                2,
+                Icons.check_circle_outline_rounded,
+                Icons.check_circle_rounded,
+                'Tasks',
+              ),
+              _item(
+                3,
+                Icons.view_kanban_outlined,
+                Icons.view_kanban_rounded,
+                'Pipeline',
+              ),
+              _item(
+                4,
+                Icons.more_horiz_rounded,
+                Icons.more_horiz_rounded,
+                'More',
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline_rounded),
-            selectedIcon: Icon(Icons.people_rounded),
-            label: 'Contacts',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.handyman_outlined),
-            selectedIcon: Icon(Icons.handyman_rounded),
-            label: 'Pros',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.check_circle_outline_rounded),
-            selectedIcon: Icon(Icons.check_circle_rounded),
-            label: 'Follow-ups',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz_rounded),
-            selectedIcon: Icon(Icons.more_horiz_rounded),
-            label: 'More',
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _item(int tab, IconData icon, IconData selectedIcon, String label) {
+    final selected = index == tab;
+    final color = selected ? OgeraColors.blue : OgeraColors.muted;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onChanged(tab),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? selectedIcon : icon, color: color, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Expandable quick action: Add Contact and Add Professional for everyone.
-class QuickActionFab extends StatefulWidget {
-  const QuickActionFab({super.key, required this.user});
+/// One circle button in the fan: what it shows and what it does.
+class _FabAction {
+  const _FabAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
-  final AuthUser user;
-
-  @override
-  State<QuickActionFab> createState() => _QuickActionFabState();
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
 }
 
-class _QuickActionFabState extends State<QuickActionFab>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 220),
-  );
+/// The one quick-action button, docked in the middle of the bottom bar.
+///
+/// It sits in a 56px box with [Clip.none], so the circle buttons can sit above
+/// the bar. Each circle moves out from the centre as [animation] runs.
+class _ShellFab extends StatelessWidget {
+  const _ShellFab({
+    required this.animation,
+    required this.open,
+    required this.onToggle,
+    required this.actions,
+  });
 
-  bool _open = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _toggle() {
-    setState(() => _open = !_open);
-    _open ? _controller.forward() : _controller.reverse();
-  }
-
-  Future<void> _run(Future<void> Function() action) async {
-    _toggle();
-    await action();
-  }
+  final Animation<double> animation;
+  final bool open;
+  final VoidCallback onToggle;
+  final List<_FabAction> actions;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _action(
-          label: 'Add contact',
-          icon: Icons.person_add_alt_1_rounded,
-          order: 2,
-          onTap: () => _run(() => openContactForm(context)),
-        ),
-        _action(
-          label: 'Add professional',
-          icon: Icons.handyman_rounded,
-          order: 1,
-          onTap: () => _run(() => openProfessionalForm(context)),
-        ),
-        const SizedBox(width: 8),
-        FloatingActionButton(
-          onPressed: _toggle,
-          backgroundColor: OgeraColors.blue,
-          foregroundColor: Colors.white,
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+    final offsets = _fanOffsets(actions.length);
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          for (var i = 0; i < actions.length; i++)
+            _FanButton(
+              animation: animation,
+              enabled: open,
+              offset: offsets[i],
+              action: actions[i],
+            ),
+          FloatingActionButton(
+            onPressed: onToggle,
+            tooltip: open ? 'Close quick actions' : 'Quick actions',
+            backgroundColor: OgeraColors.blue,
+            foregroundColor: Colors.white,
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: RotationTransition(
+              turns: Tween<double>(begin: 0, end: 0.125).animate(animation),
+              child: const Icon(Icons.add_rounded, size: 27),
+            ),
           ),
-          child: AnimatedRotation(
-            turns: _open ? 0.125 : 0,
-            duration: const Duration(milliseconds: 220),
-            child: const Icon(Icons.add_rounded, size: 27),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _action({
-    required String label,
-    required IconData icon,
-    required int order,
-    required VoidCallback onTap,
-  }) {
-    final animation = CurvedAnimation(
-      parent: _controller,
-      curve: Interval((order - 1) * 0.12, 1, curve: Curves.easeOutBack),
-    );
-    return SizeTransition(
-      sizeFactor: animation,
-      axisAlignment: 0,
-      child: FadeTransition(
-        opacity: _controller,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 6),
+  /// Where each circle ends up, measured from the centre of the button.
+  /// Negative y is up. The first button goes left, the middle one up, the
+  /// last right, so the arc stays clear of the bar's edges.
+  static List<Offset> _fanOffsets(int count) => switch (count) {
+    1 => const [Offset(0, -96)],
+    2 => const [Offset(-72, -88), Offset(72, -88)],
+    _ => const [Offset(-96, -72), Offset(0, -112), Offset(96, -72)],
+  };
+}
+
+/// One labelled circle button in the fan. Hidden and non-tappable when closed.
+class _FanButton extends StatelessWidget {
+  const _FanButton({
+    required this.animation,
+    required this.enabled,
+    required this.offset,
+    required this.action,
+  });
+
+  final Animation<double> animation;
+  final bool enabled;
+  final Offset offset;
+  final _FabAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !enabled,
+      child: AnimatedBuilder(
+        animation: animation,
+        builder: (context, child) {
+          // Closed: build nothing, so the hidden labels are not announced.
+          if (animation.value == 0) return const SizedBox.shrink();
+          // Ease the progress so the circles decelerate into place.
+          final t = Curves.easeOutCubic.transform(animation.value);
+          return Opacity(
+            opacity: t,
+            child: Transform.translate(offset: offset * t, child: child),
+          );
+        },
+        // The label and circle are taller than the 56px FAB box. OverflowBox
+        // lets this button take its natural size and stay centred on the FAB.
+        child: OverflowBox(
+          maxWidth: 200,
+          maxHeight: 200,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: OgeraColors.ink,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  label,
+                  action.label,
+                  maxLines: 1,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(height: 4),
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: Material(
-                  color: OgeraColors.surface,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: const BorderSide(color: OgeraColors.line),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: onTap,
-                    child: Icon(icon, size: 18, color: OgeraColors.blue),
+              Material(
+                color: OgeraColors.surface,
+                elevation: 3,
+                shape: const CircleBorder(
+                  side: BorderSide(color: OgeraColors.line),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: action.onTap,
+                  customBorder: const CircleBorder(),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Icon(action.icon, size: 22, color: OgeraColors.blue),
                   ),
                 ),
               ),
@@ -350,38 +484,9 @@ class _QuickActionFabState extends State<QuickActionFab>
   }
 }
 
-/// Simple FAB that directly opens a form without nested menu
-class _DirectActionFab extends StatelessWidget {
-  const _DirectActionFab({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton(
-      onPressed: onPressed,
-      tooltip: tooltip,
-      backgroundColor: OgeraColors.blue,
-      foregroundColor: Colors.white,
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Icon(icon, size: 27),
-    );
-  }
-}
-
-/// Shared entry points, used by the quick action and by the empty states.
+/// Shared entry points for the Add contact and Add professional forms.
 /// Each pushes through [pushShellRoute] so the form can write back into the
 /// list it was opened from.
-
 Future<void> openContactForm(BuildContext context) async {
   final contacts = context.read<ContactsViewModel>();
   final created = await pushShellRoute<dynamic>(

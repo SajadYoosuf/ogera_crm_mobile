@@ -4,8 +4,12 @@ import 'package:provider/provider.dart';
 
 import 'core/network/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/activity_service.dart';
 import 'services/crm_services.dart';
+import 'services/expense_service.dart';
 import 'services/geocoding_service.dart';
+import 'services/home_service.dart';
+import 'services/location_streaming_service.dart';
 import 'services/password_reset_service.dart';
 import 'theme/app_theme.dart';
 import 'view_models/forgot_password_view_model.dart';
@@ -17,9 +21,8 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  LocationStreamingService.init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -56,6 +59,15 @@ class OgeraCrmApp extends StatelessWidget {
         ),
         ProxyProvider<ApiClient, StaffDirectoryService>(
           update: (_, api, _) => StaffDirectoryService(api),
+        ),
+        ProxyProvider<ApiClient, ActivityService>(
+          update: (_, api, _) => ActivityService(api),
+        ),
+        ProxyProvider<ApiClient, HomeService>(
+          update: (_, api, _) => HomeService(api),
+        ),
+        ProxyProvider<ApiClient, ExpenseService>(
+          update: (_, api, _) => ExpenseService(api),
         ),
 
         ChangeNotifierProvider<SessionViewModel>(

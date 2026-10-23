@@ -7,13 +7,18 @@ import '../../core/widgets/state_views.dart';
 import '../../models/followup.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/followups_view_model.dart';
+import '../../view_models/home_view_model.dart';
 import '../../view_models/session_view_model.dart';
 import '../followups/lead_detail_screen.dart';
 import '../shell_scope.dart';
+import 'checkin_button.dart';
+import 'stats_row.dart';
 
-/// Staff home — "My day" view: overdue, due-today, and upcoming follow-ups.
-/// Every figure is read from the view models the shell already loaded, so
-/// opening Home costs no extra network requests.
+/// Home tab: greeting, the check-in card, the stats for the chosen range, and
+/// the follow-ups that need attention today.
+///
+/// The shell loads the KPIs, attendance and follow-ups when the tab first
+/// opens. Pull down to reload all of them.
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
@@ -82,107 +87,109 @@ class _StaffHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final home = context.read<HomeViewModel>();
     final followups = context.watch<FollowupsViewModel>();
-    final grouped = followups.leadsByDueBucket;
-    final overdue = grouped[DueBucket.overdue]!;
-    final today = grouped[DueBucket.today]!;
-    final upcoming = grouped[DueBucket.upcoming]!;
 
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
-      appBar: AppBar(title: const Text('My day')),
+      appBar: AppBar(title: const Text('Home')),
       body: RefreshIndicator(
-        onRefresh: followups.refresh,
+        onRefresh: () async {
+          await Future.wait([home.load(), followups.refresh()]);
+        },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             OgeraSpacing.screen,
             OgeraSpacing.screen,
             OgeraSpacing.screen,
-            200,
+            120,
           ),
           children: [
             const _Greeting(),
-            _MetricGrid(
-              metrics: [
-                _MetricData(
-                  label: 'Overdue',
-                  value: '${overdue.length}',
-                  icon: Icons.error_outline_rounded,
-                  color: OgeraColors.danger,
-                ),
-                _MetricData(
-                  label: 'Due today',
-                  value: '${today.length}',
-                  icon: Icons.today_rounded,
-                  color: OgeraColors.warning,
-                ),
-                _MetricData(
-                  label: 'Upcoming',
-                  value: '${upcoming.length}',
-                  icon: Icons.event_rounded,
-                  color: OgeraColors.info,
-                ),
-                _MetricData(
-                  label: 'Assigned',
-                  value: '${followups.visibleLeads.length}',
-                  icon: Icons.assignment_outlined,
-                  color: OgeraColors.blue,
-                ),
-              ],
-            ),
+            const CheckinCard(),
             const SizedBox(height: 20),
-            if (followups.isLoading) ...[
-              const SectionHeader(
-                title: 'Needs attention',
-                icon: Icons.priority_high_rounded,
-              ),
-              const LoadingListView(itemCount: 2, itemHeight: 80),
-            ] else if (overdue.isEmpty && today.isEmpty) ...[
-              const SectionHeader(
-                title: 'Needs attention',
-                icon: Icons.priority_high_rounded,
-              ),
-              const OgeraCard(
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle_rounded,
-                      color: OgeraColors.success,
-                      size: 22,
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Nothing overdue and nothing due today. Well done.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              if (overdue.isNotEmpty)
-                _TaskGroup(
-                  bucket: DueBucket.overdue,
-                  leads: overdue,
-                  viewModel: followups,
-                ),
-              if (today.isNotEmpty) ...[
-                if (overdue.isNotEmpty) const SizedBox(height: 20),
-                _TaskGroup(
-                  bucket: DueBucket.today,
-                  leads: today,
-                  viewModel: followups,
-                ),
-              ],
-            ],
+            const StatsRow(),
+            const SizedBox(height: 20),
+            const _NeedsAttention(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Overdue and due-today follow-ups. Each group shows at most four cards.
+class _NeedsAttention extends StatelessWidget {
+  const _NeedsAttention();
+
+  @override
+  Widget build(BuildContext context) {
+    final followups = context.watch<FollowupsViewModel>();
+    final grouped = followups.leadsByDueBucket;
+    final overdue = grouped[DueBucket.overdue]!;
+    final today = grouped[DueBucket.today]!;
+
+    if (followups.isLoading) {
+      return const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            title: 'Needs attention',
+            icon: Icons.priority_high_rounded,
+          ),
+          LoadingListView(itemCount: 2, itemHeight: 80),
+        ],
+      );
+    }
+
+    if (overdue.isEmpty && today.isEmpty) {
+      return const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            title: 'Needs attention',
+            icon: Icons.priority_high_rounded,
+          ),
+          OgeraCard(
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: OgeraColors.success,
+                  size: 22,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Nothing overdue and nothing due today. Well done.',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (overdue.isNotEmpty)
+          _TaskGroup(
+            bucket: DueBucket.overdue,
+            leads: overdue,
+            viewModel: followups,
+          ),
+        if (overdue.isNotEmpty && today.isNotEmpty) const SizedBox(height: 20),
+        if (today.isNotEmpty)
+          _TaskGroup(
+            bucket: DueBucket.today,
+            leads: today,
+            viewModel: followups,
+          ),
+      ],
     );
   }
 }
@@ -293,85 +300,6 @@ class _TaskCard extends StatelessWidget {
           const Icon(Icons.chevron_right_rounded, color: OgeraColors.muted),
         ],
       ),
-    );
-  }
-}
-
-// ------------------------------------------------------------------- metrics
-
-class _MetricData {
-  const _MetricData({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-}
-
-class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.metrics});
-
-  final List<_MetricData> metrics;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      crossAxisSpacing: OgeraSpacing.gap,
-      mainAxisSpacing: OgeraSpacing.gap,
-      childAspectRatio: 1.4,
-      children: [
-        for (final metric in metrics)
-          OgeraCard(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: metric.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(metric.icon, size: 17, color: metric.color),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      metric.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      metric.label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: OgeraColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }

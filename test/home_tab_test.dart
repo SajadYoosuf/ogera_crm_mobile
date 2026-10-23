@@ -1,50 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/core/utils/formatters.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
+import 'package:ogera_crm_mobile/services/home_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
-import 'package:ogera_crm_mobile/view_models/contacts_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/followups_view_model.dart';
+import 'package:ogera_crm_mobile/view_models/home_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/home/home_tab.dart';
 import 'package:provider/provider.dart';
 
 import 'test_helpers.dart';
 
-/// The Home module renders one of two dashboards depending on role: the Head
-/// gets a team overview, Staff get their own day's queue.
+/// The Home tab shows the same layout to every role: a greeting, the check-in
+/// card, the KPI tiles for the chosen range, and the follow-ups that need
+/// attention today.
 void main() {
-  testWidgets('Head sees the team overview with pipeline and recent contacts', (
+  testWidgets('Head sees the greeting, check-in card and KPI tiles', (
     tester,
   ) async {
-    final api = fakeApiClient({
-      '/contacts': (uri) {
-        final mode = uri.queryParameters['awareness_mode'];
-        final all = [
-          contactJson(id: 1, name: 'Amina Lead'),
-          contactJson(id: 2, name: 'Bala Awareness', type: 'awareness'),
-        ];
-        // The tab badges ask for one kind at a time; the totals are the
-        // server's, not the length of the rows shown.
-        final totals = {'0': 3, '1': 2};
-        final rows = all
-            .where((c) => mode == null || '${c['awareness_mode']}' == mode)
-            .toList();
-        return pageOf(rows, total: totals[mode] ?? rows.length);
-      },
-      '/tasks': (_) => {
-        'items': <Map<String, dynamic>>[],
-        'total': 0,
-        'summary': {'overdue': 0, 'today': 0, 'upcoming': 0, 'done': 0},
-      },
-      '/contacts/stage-types': (_) => [
-        stageJson(id: 'new', label: 'New', orderIndex: 0),
-        stageJson(id: 'won', label: 'Won', orderIndex: 1),
-      ],
-      '/employees/directory': (_) => <Map<String, dynamic>>[],
-    });
-
+    final api = _api(contacts: [contactJson(id: 1, name: 'Amina Lead')]);
     final headUser = const AuthUser(
       id: 1,
       email: 'head@ogera.com',
@@ -53,57 +30,17 @@ void main() {
       role: UserRole.salesHead,
     );
 
-    final contacts = ContactsViewModel(ContactsService(api));
-    final followups = FollowupsViewModel(
-      FollowupsService(api),
-      StaffDirectoryService(api),
-      headUser,
-    );
-    await Future.wait([contacts.load(), followups.load()]);
+    await _pumpHome(tester, api: api, user: headUser);
 
-    final session = SessionViewModel(
-      auth: FakeAuthService(),
-      api: api,
-    );
-    await session.adopt(AuthSession(accessToken: 'token', user: headUser));
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SessionViewModel>.value(value: session),
-          ChangeNotifierProvider<ContactsViewModel>.value(value: contacts),
-          ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.build(),
-          home: const Scaffold(body: HomeTab()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Manager'), findsOneWidget);
-
-    expect(find.text('Leads'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('Awareness'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-
-    // Everything below the metric grid sits below the fold at the default
-    // test viewport, so each section is scrolled into view in turn.
-    // SectionHeader renders its title upper-cased.
-    await _scrollUntilVisible(tester, find.text('PIPELINE'));
-    expect(find.text('PIPELINE'), findsOneWidget);
-    expect(find.text('New'), findsOneWidget);
-
-    await _scrollUntilVisible(tester, find.text('Amina Lead'));
-    // The recent list shows the Leads tab; the awareness contact only counts
-    // towards the Awareness metric.
-    expect(find.text('Amina Lead'), findsOneWidget);
+    expect(find.text('Not checked in'), findsOneWidget);
+    expect(find.text('Check in'), findsOneWidget);
+    expect(find.text('New leads'), findsOneWidget);
+    expect(find.text('Open follow-ups'), findsOneWidget);
+    expect(find.text('Won'), findsOneWidget);
   });
 
-  testWidgets('Staff see their own overdue, due-today, and upcoming queue', (
+  testWidgets('Staff see their own overdue and due-today queue', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -111,38 +48,19 @@ void main() {
     final today = isoDate(now);
     final nextWeek = isoDate(now.add(const Duration(days: 7)));
 
-    final api = fakeApiClient({
-      '/contacts': (_) => pageOf([
+    final api = _api(
+      contacts: [
         leadJson(id: 1, name: 'Overdue Lead', stage: 'new', assignedTo: 2),
         leadJson(id: 2, name: 'Due Today Lead', stage: 'new', assignedTo: 2),
         leadJson(id: 3, name: 'Upcoming Lead', stage: 'new', assignedTo: 2),
-      ]),
-      // A lead's due date is the earliest open follow-up booked on it.
-      '/tasks': (_) => {
-        'items': [
-          taskJson(
-            id: 10,
-            contactId: 1,
-            scheduledDate: yesterday,
-            assignedTo: 2,
-          ),
-          taskJson(id: 11, contactId: 2, scheduledDate: today, assignedTo: 2),
-          taskJson(
-            id: 12,
-            contactId: 3,
-            scheduledDate: nextWeek,
-            assignedTo: 2,
-          ),
-        ],
-        'total': 3,
-        'summary': {'overdue': 1, 'today': 1, 'upcoming': 1, 'done': 0},
-      },
-      '/contacts/stage-types': (_) => [
-        stageJson(id: 'new', label: 'New', orderIndex: 0),
       ],
-      '/employees/directory': (_) => <Map<String, dynamic>>[],
-    });
-
+      // A lead's due date is the earliest open follow-up booked on it.
+      tasks: [
+        taskJson(id: 10, contactId: 1, scheduledDate: yesterday, assignedTo: 2),
+        taskJson(id: 11, contactId: 2, scheduledDate: today, assignedTo: 2),
+        taskJson(id: 12, contactId: 3, scheduledDate: nextWeek, assignedTo: 2),
+      ],
+    );
     final staffUser = const AuthUser(
       id: 2,
       email: 'staff@ogera.com',
@@ -151,49 +69,74 @@ void main() {
       role: UserRole.salesStaff,
     );
 
-    final followups = FollowupsViewModel(
-      FollowupsService(api),
-      StaffDirectoryService(api),
-      staffUser,
-    );
-    await followups.load();
+    await _pumpHome(tester, api: api, user: staffUser);
 
-    final session = SessionViewModel(
-      auth: FakeAuthService(),
-      api: api,
-    );
-    await session.adopt(AuthSession(accessToken: 'token', user: staffUser));
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SessionViewModel>.value(value: session),
-          ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.build(),
-          home: const Scaffold(body: HomeTab()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('My day'), findsOneWidget);
     expect(find.text('Sales Staff'), findsOneWidget);
-
-    expect(find.text('Overdue'), findsOneWidget);
-    expect(find.text('Due today'), findsOneWidget);
-    expect(find.text('Upcoming'), findsOneWidget);
-    expect(find.text('Assigned'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget); // Assigned metric == all 3 leads.
-
-    // "Needs attention" sits below the fold at the default test viewport.
     await _scrollUntilVisible(tester, find.text('Overdue Lead'));
     expect(find.text('Overdue Lead'), findsOneWidget);
 
     await _scrollUntilVisible(tester, find.text('Due Today Lead'));
     expect(find.text('Due Today Lead'), findsOneWidget);
   });
+}
+
+/// Stubs every endpoint the Home tab calls.
+ApiClient _api({
+  required List<Map<String, dynamic>> contacts,
+  List<Map<String, dynamic>> tasks = const [],
+}) {
+  return fakeApiClient({
+    '/contacts': (_) => pageOf(contacts, total: contacts.length),
+    '/tasks': (_) => {
+      'items': tasks,
+      'total': tasks.length,
+      'summary': {'overdue': 0, 'today': 0, 'upcoming': 0, 'done': 0},
+    },
+    '/contacts/stage-types': (_) => [
+      stageJson(id: 'new', label: 'New', orderIndex: 0),
+      stageJson(id: 'won', label: 'Won', orderIndex: 1),
+    ],
+    '/employees/directory': (_) => <Map<String, dynamic>>[],
+    '/dashboard/summary': (_) => {
+      'kpis': {
+        'total_contacts': contacts.length,
+        'new_leads': {'value': 1},
+        'open_followups': {'value': 2, 'overdue': 1},
+        'won': {'value': 0},
+      },
+    },
+    '/attendance/today': (_) => null,
+  });
+}
+
+/// Loads the view models the shell would provide, then pumps the tab.
+Future<void> _pumpHome(
+  WidgetTester tester, {
+  required ApiClient api,
+  required AuthUser user,
+}) async {
+  final followups = FollowupsViewModel(
+    FollowupsService(api),
+    StaffDirectoryService(api),
+    user,
+  );
+  final home = HomeViewModel(HomeService(api));
+  await Future.wait([followups.load(), home.load()]);
+
+  final session = SessionViewModel(auth: FakeAuthService(), api: api);
+  await session.adopt(AuthSession(accessToken: 'token', user: user));
+
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<SessionViewModel>.value(value: session),
+        ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
+        ChangeNotifierProvider<HomeViewModel>.value(value: home),
+      ],
+      child: MaterialApp(theme: AppTheme.build(), home: const HomeTab()),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 /// `dragUntilVisible` throws if the target never appears within its own
