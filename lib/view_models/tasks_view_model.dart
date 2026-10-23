@@ -1,14 +1,14 @@
 /// TasksViewModel manages the Tasks tab's state.
 ///
-/// The user can:
-///   • tap a day in the calendar row  → filters tasks to that date
-///   • pick a status chip (Todo / In Progress / Completed) → filter
-///   • pick a priority chip (Low / Medium / High) → filter
-///   • change a task's status via the bottom sheet → calls update()
-///   • reschedule a task → calls reschedule()
+/// WHAT IT DOES:
+///   - Holds the list of tasks loaded from GET /tasks.
+///   - Lets the user select a day on the calendar row → filters to that date.
+///   - Lets the user pick status/priority chips → stacks filters.
+///   - Exposes methods to complete, change status, or reschedule a task.
 ///
-/// All three filters stack: only tasks matching all active filters show.
-/// The list reloads from the server whenever any filter changes.
+/// WHY THIS PATTERN:
+///   The view model is the single source of truth for the Tasks tab.
+///   The screen reads state and calls methods; it never calls the API directly.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -25,16 +25,24 @@ class TasksViewModel extends ChangeNotifier {
   String? _error;
 
   final List<Task> _tasks = [];
+  TaskSummary? _summary;
+
   DateTime _selectedDate = DateTime.now();
-  TaskStatus? _statusFilter;
+
+  /// null = "open" (both todo + in_progress) — shows the whole active list.
+  String? _statusFilter;
+
   TaskPriority? _priorityFilter;
 
   List<Task> get tasks => List.unmodifiable(_tasks);
+  TaskSummary? get summary => _summary;
   bool get isLoading => _isLoading;
   String? get error => _error;
   DateTime get selectedDate => _selectedDate;
-  TaskStatus? get statusFilter => _statusFilter;
+  String? get statusFilter => _statusFilter;
   TaskPriority? get priorityFilter => _priorityFilter;
+
+  // ── Loading ──────────────────────────────────────────────────────────────
 
   /// Load tasks from the server using the current filters.
   Future<void> load() async {
@@ -42,14 +50,18 @@ class TasksViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      final dateStr = isoDate(_selectedDate);
       final result = await _service.list(
-        status: _statusFilter,
+        statusFilter: _statusFilter ?? 'open',
         priority: _priorityFilter,
-        date: isoDate(_selectedDate),
+        dateFrom: dateStr,
+        dateTo: dateStr,
+        includeOverdue: _statusFilter == null || _statusFilter == 'open',
       );
       _tasks
         ..clear()
         ..addAll(result.items);
+      _summary = result.summary;
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -58,6 +70,8 @@ class TasksViewModel extends ChangeNotifier {
     }
   }
 
+  // ── Filters ───────────────────────────────────────────────────────────────
+
   /// Move the calendar selection to [date] and reload.
   Future<void> selectDate(DateTime date) async {
     _selectedDate = date;
@@ -65,7 +79,9 @@ class TasksViewModel extends ChangeNotifier {
   }
 
   /// Toggle or clear the status chip filter, then reload.
-  Future<void> setStatusFilter(TaskStatus? status) async {
+  ///
+  /// Passing the same value as the current filter clears it (back to "open").
+  Future<void> setStatusFilter(String? status) async {
     _statusFilter = (_statusFilter == status) ? null : status;
     await load();
   }
@@ -76,35 +92,50 @@ class TasksViewModel extends ChangeNotifier {
     await load();
   }
 
-  /// Changes a task's status (called from the status bottom sheet).
-  Future<void> updateStatus(int id, TaskStatus status, {String? notes}) async {
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
+  /// Marks a task as complete with an outcome (required by the backend).
+  ///
+  /// Removes the task from the list on success (completed tasks go to
+  /// the "Completed" view, which loads separately).
+  Future<bool> complete(int id, {required String outcome, String? notes}) async {
     try {
-      final updated = await _service.update(id, status: status, notes: notes);
-      final idx = _tasks.indexWhere((t) => t.id == id);
-      if (idx != -1) {
-        _tasks[idx] = updated;
-        notifyListeners();
-      }
+      await _service.complete(id, outcome: outcome, notes: notes);
+      _tasks.removeWhere((t) => t.id == id);
+      notifyListeners();
+      return true;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      return false;
     }
   }
 
-  /// Reschedules a task (called from the reschedule bottom sheet).
-  ///
-  /// [scheduledAt] is an ISO-8601 datetime string.
-  Future<void> reschedule(int id, String scheduledAt) async {
+  /// Toggles a task between todo ↔ in_progress.
+  Future<bool> toggleStatus(int id, TaskStatus status) async {
     try {
-      final updated = await _service.update(id, scheduledAt: scheduledAt);
-      final idx = _tasks.indexWhere((t) => t.id == id);
-      if (idx != -1) {
-        _tasks[idx] = updated;
-        notifyListeners();
-      }
+      await _service.updateStatus(id, status);
+      await load();
+      return true;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      return false;
+    }
+  }
+
+  /// Reschedules a task.
+  ///
+  /// [dueAt] is an ISO-8601 datetime string.
+  Future<bool> reschedule(int id, String dueAt) async {
+    try {
+      await _service.reschedule(id, dueAt);
+      await load();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 }

@@ -97,10 +97,10 @@ void main() {
 
     test('a wrong password shows the server message', () async {
       await expectLater(
-        AuthService(ApiClient(baseUrl: baseUrl), _MemoryStore()).signIn(
-          email: 'anu@example.com',
-          password: 'nope',
-        ),
+        AuthService(
+          ApiClient(baseUrl: baseUrl),
+          _MemoryStore(),
+        ).signIn(email: 'anu@example.com', password: 'nope'),
         throwsA(
           isA<AuthException>().having(
             (e) => e.message,
@@ -115,8 +115,10 @@ void main() {
     // mobile signIn() path. The e2e setup uses signInForTest() to bypass this.
     test('admin and manager are blocked by the mobile app', () async {
       await expectLater(
-        AuthService(ApiClient(baseUrl: baseUrl), _MemoryStore())
-            .signIn(email: 'admin@example.com', password: _password),
+        AuthService(
+          ApiClient(baseUrl: baseUrl),
+          _MemoryStore(),
+        ).signIn(email: 'admin@example.com', password: _password),
         throwsA(
           isA<AuthException>().having((e) => e.code, 'code', 'STAFF_ONLY'),
         ),
@@ -227,21 +229,23 @@ void main() {
       );
     });
 
-    test('lists split leads from awareness and count both', () async {
-      final leads = await admin.contacts.list(
-        type: ContactType.lead,
-        withCounts: true,
+    test('consumer list includes both kinds and type counts add up', () async {
+      final consumers = await admin.contacts.list(
+        kind: ContactKind.consumer,
+        limit: 100,
       );
-      expect(leads.contacts.any((c) => c.id == offline.id), isTrue);
-      expect(leads.contacts.any((c) => c.id == aware.id), isFalse);
-      expect(leads.leadsCount, greaterThanOrEqualTo(1));
-      expect(leads.awarenessCount, greaterThanOrEqualTo(1));
+      expect(consumers.contacts.any((c) => c.id == offline.id), isTrue);
+      expect(consumers.contacts.any((c) => c.id == aware.id), isTrue);
 
-      final awareness = await admin.contacts.list(
-        type: ContactType.awareness,
+      final counts = await admin.contacts.typeCounts();
+      expect(counts.of(null), greaterThanOrEqualTo(counts.consumer));
+      expect(counts.consumer, greaterThanOrEqualTo(2));
+
+      final byName = await admin.contacts.list(
+        kind: ContactKind.consumer,
         query: 'Beena',
       );
-      expect(awareness.contacts.map((c) => c.id), [aware.id]);
+      expect(byName.contacts.map((c) => c.id), [aware.id]);
     });
 
     test('filters by source, creator and date', () async {
@@ -287,8 +291,8 @@ void main() {
       await viewModel.load();
       expect(viewModel.error, isNull);
       expect(viewModel.contacts.any((c) => c.id == offline.id), isTrue);
-      expect(viewModel.leadsCount, greaterThanOrEqualTo(1));
-      viewModel.selectType(ContactType.awareness);
+      expect(viewModel.countFor(null), greaterThanOrEqualTo(1));
+      viewModel.selectKind(ContactKind.consumer);
       await Future<void>.delayed(const Duration(milliseconds: 500));
       expect(viewModel.contacts.any((c) => c.id == aware.id), isTrue);
       viewModel.dispose();
@@ -319,11 +323,11 @@ void main() {
           isA<ApiException>().having((e) => e.isNotFound, 'isNotFound', isTrue),
         ),
       );
-      final awareness = await admin.contacts.list(
-        type: ContactType.awareness,
+      final remaining = await admin.contacts.list(
+        kind: ContactKind.consumer,
         query: 'Beena',
       );
-      expect(awareness.contacts, isEmpty);
+      expect(remaining.contacts, isEmpty);
     });
   });
 

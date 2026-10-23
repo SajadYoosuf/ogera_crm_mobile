@@ -162,39 +162,69 @@ void main() {
 
   group('ContactsService', () {
     test(
-      'list asks for consumers by awareness_mode and builds the page',
+      'list defaults to consumers, and kind: null asks for every type',
       () async {
         final server = FakeServer({
           'GET /contacts': (request) {
-            final limit = int.parse(request.url.queryParameters['limit']!);
             return pageOf(
-              limit == 1 ? [] : [contactJson(id: 1, name: 'A')],
-              total: request.url.queryParameters['awareness_mode'] == '1'
-                  ? 4
-                  : 41,
+              [contactJson(id: 1, name: 'A')],
+              total: 41,
               skip: int.parse(request.url.queryParameters['skip'] ?? '0'),
-              limit: limit,
+              limit: int.parse(request.url.queryParameters['limit']!),
             );
           },
         });
+        final service = ContactsService(server.api);
 
-        final page = await ContactsService(
-          server.api,
-        ).list(query: 'ar', type: ContactType.lead, page: 3, withCounts: true);
+        final page = await service.list(query: 'ar', page: 3);
+        await service.list(kind: null);
 
         final first = server.calls.first.url.queryParameters;
         expect(first['contact_type'], 'consumer');
-        expect(first['awareness_mode'], '0');
         expect(first['search'], 'ar');
         expect(first['skip'], '40');
         expect(first['limit'], '20');
         expect(page.total, 41);
         expect(page.totalPages, 3);
         expect(page.page, 3);
-        expect(page.leadsCount, 41);
-        expect(page.awarenessCount, 4);
+        expect(
+          server.calls[1].url.queryParameters.containsKey('contact_type'),
+          isFalse,
+        );
       },
     );
+
+    test('list sends the chosen partner or dealer type', () async {
+      final server = FakeServer({
+        'GET /contacts': (request) =>
+            pageOf([contactJson(id: 1, name: 'P', kind: 'partner')], total: 1),
+      });
+
+      await ContactsService(server.api).list(kind: ContactKind.partner);
+
+      expect(
+        server.calls.single.url.queryParameters['contact_type'],
+        'partner',
+      );
+    });
+
+    test('typeCounts reads /contacts/type-counts for the tab badges', () async {
+      final server = FakeServer({
+        'GET /contacts/type-counts': (_) => {
+          'all': 9,
+          'consumer': 5,
+          'partner': 3,
+          'dealer': 1,
+        },
+      });
+
+      final counts = await ContactsService(server.api).typeCounts();
+
+      expect(counts.of(null), 9);
+      expect(counts.of(ContactKind.consumer), 5);
+      expect(counts.of(ContactKind.partner), 3);
+      expect(counts.of(ContactKind.dealer), 1);
+    });
 
     test(
       'an unknown source filters to nothing instead of everything',

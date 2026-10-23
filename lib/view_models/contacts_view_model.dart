@@ -28,15 +28,15 @@ class ContactsViewModel extends ChangeNotifier {
   bool _isLoadingMore = false;
   String? _error;
   String _query = '';
-  ContactType _type = ContactType.lead;
+  // null means the "All Contacts" tab; otherwise one of consumer/partner/dealer.
+  ContactKind? _kind;
   String? _source;
   String? _startDate;
   String? _endDate;
   int _page = 1;
   int _totalPages = 1;
   int _total = 0;
-  int _leadsCount = 0;
-  int _awarenessCount = 0;
+  ContactTypeCounts _counts = const ContactTypeCounts();
 
   List<Contact> get contacts => List.unmodifiable(_contacts);
   bool get isLoading => _isLoading;
@@ -44,13 +44,14 @@ class ContactsViewModel extends ChangeNotifier {
   bool get hasMore => _page < _totalPages;
   String? get error => _error;
   String get query => _query;
-  ContactType get type => _type;
+  ContactKind? get kind => _kind;
   String? get source => _source;
   String? get startDate => _startDate;
   String? get endDate => _endDate;
   int get total => _total;
-  int get leadsCount => _leadsCount;
-  int get awarenessCount => _awarenessCount;
+
+  /// Badge numbers for the type tabs.
+  ContactTypeCounts get counts => _counts;
 
   bool get hasFilters =>
       _source != null ||
@@ -58,8 +59,7 @@ class ContactsViewModel extends ChangeNotifier {
       _endDate != null ||
       _query.isNotEmpty;
 
-  int countFor(ContactType type) =>
-      type == ContactType.lead ? _leadsCount : _awarenessCount;
+  int countFor(ContactKind? kind) => _counts.of(kind);
 
   Future<void> load({bool silent = false}) async {
     if (!silent) {
@@ -86,9 +86,10 @@ class ContactsViewModel extends ChangeNotifier {
     _debounceTimer = Timer(_debounce, () => load(silent: false));
   }
 
-  void selectType(ContactType type) {
-    if (_type == type) return;
-    _type = type;
+  /// Switches the type tab. Re-selecting the same tab does nothing.
+  void selectKind(ContactKind? kind) {
+    if (_kind == kind) return;
+    _kind = kind;
     load();
   }
 
@@ -122,13 +123,13 @@ class ContactsViewModel extends ChangeNotifier {
     try {
       final result = await _service.list(
         query: _query.isEmpty ? null : _query,
-        type: _type,
+        // Explicit null on purpose: the "All Contacts" tab must not be limited to consumers.
+        kind: _kind,
         source: _source,
         startDate: _startDate,
         endDate: _endDate,
         page: page,
         limit: _pageSize,
-        withCounts: true,
       );
       if (sequence != _sequence) return;
 
@@ -142,9 +143,8 @@ class ContactsViewModel extends ChangeNotifier {
       _page = result.page;
       _totalPages = result.totalPages;
       _total = result.total;
-      _leadsCount = result.leadsCount;
-      _awarenessCount = result.awarenessCount;
       _error = null;
+      if (replace) await _loadCounts();
     } on ApiException catch (error) {
       if (sequence != _sequence) return;
       _error = error.message;
@@ -158,16 +158,27 @@ class ContactsViewModel extends ChangeNotifier {
     }
   }
 
+  /// Refreshes the tab badges. A failed count keeps the last numbers and must
+  /// not hide the list, the same rule the web page follows.
+  Future<void> _loadCounts() async {
+    try {
+      _counts = await _service.typeCounts();
+    } on ApiException {
+      // Keep the previous counts.
+    }
+  }
+
   /// Applied after a create, edit, or delete so the list reflects the change
   /// without a full refetch.
   void upsert(Contact contact) {
     final index = _contacts.indexWhere((item) => item.id == contact.id);
+    final shown = _kind == null || contact.kind == _kind;
     if (index == -1) {
-      if (contact.contactType == _type) {
+      if (shown) {
         _contacts.insert(0, contact);
         _total++;
       }
-    } else if (contact.contactType == _type) {
+    } else if (shown) {
       _contacts[index] = contact;
     } else {
       _contacts.removeAt(index);

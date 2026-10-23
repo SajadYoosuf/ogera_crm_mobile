@@ -19,6 +19,61 @@ enum ContactType {
   int get awarenessMode => this == ContactType.awareness ? 1 : 0;
 }
 
+/// The three contact types the Contacts tab lists, matching the web tabs.
+/// `contact_type` in the API is one of these ids. Lead and awareness are not
+/// types; they are a stage or profile detail (see [ContactType]).
+enum ContactKind {
+  consumer('consumer', 'Consumer'),
+  partner('partner', 'Partner'),
+  dealer('dealer', 'Dealer');
+
+  const ContactKind(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  /// Reads the API's `contact_type`. Anything unknown is treated as a consumer,
+  /// the same default the API uses.
+  static ContactKind fromId(String? value) => switch (value) {
+    'partner' => ContactKind.partner,
+    'dealer' => ContactKind.dealer,
+    _ => ContactKind.consumer,
+  };
+}
+
+/// Row counts for the Contacts tabs, from `GET /contacts/type-counts`.
+/// The counts ignore search and filters, the same as the web tabs.
+class ContactTypeCounts {
+  const ContactTypeCounts({
+    this.all = 0,
+    this.consumer = 0,
+    this.partner = 0,
+    this.dealer = 0,
+  });
+
+  factory ContactTypeCounts.fromJson(Map<String, dynamic> json) {
+    return ContactTypeCounts(
+      all: asInt(json['all']) ?? 0,
+      consumer: asInt(json['consumer']) ?? 0,
+      partner: asInt(json['partner']) ?? 0,
+      dealer: asInt(json['dealer']) ?? 0,
+    );
+  }
+
+  final int all;
+  final int consumer;
+  final int partner;
+  final int dealer;
+
+  /// The count for one tab. `null` is the "All Contacts" tab.
+  int of(ContactKind? kind) => switch (kind) {
+    null => all,
+    ContactKind.consumer => consumer,
+    ContactKind.partner => partner,
+    ContactKind.dealer => dealer,
+  };
+}
+
 /// A consumer contact as returned by `GET /contacts` (slim row) or
 /// `GET /contacts/{id}` (full detail). Fields the API has no column for
 /// (panchayath, ward, water source, campaign flags and the like) stay null.
@@ -28,6 +83,7 @@ class Contact {
     required this.phone,
     required this.contactType,
     required this.createdAt,
+    this.kind = ContactKind.consumer,
     this.name,
     this.countryCode,
     this.source,
@@ -69,6 +125,9 @@ class Contact {
   final int id;
   final String phone;
   final ContactType contactType;
+
+  /// Consumer, partner or dealer. Drives the type badge on the Contacts tab.
+  final ContactKind kind;
   final DateTime createdAt;
   final String? name;
   final String? countryCode;
@@ -157,6 +216,7 @@ class Contact {
       contactType: awarenessMode == 1
           ? ContactType.awareness
           : ContactType.lead,
+      kind: ContactKind.fromId(asText(json['contact_type'])),
       createdAt: parseDate(json['created_at']) ?? DateTime.now(),
       name: asText(json['name']),
       source: asText(source['slug']),
@@ -336,22 +396,14 @@ class ContactPage {
     required this.total,
     required this.page,
     required this.totalPages,
-    required this.leadsCount,
-    required this.awarenessCount,
   });
 
   final List<Contact> contacts;
   final int total;
   final int page;
   final int totalPages;
-  final int leadsCount;
-  final int awarenessCount;
 
-  factory ContactPage.fromJson(
-    Map<String, dynamic> json, {
-    int leadsCount = 0,
-    int awarenessCount = 0,
-  }) {
+  factory ContactPage.fromJson(Map<String, dynamic> json) {
     final rows = (json['items'] as List?) ?? const [];
     final total = asInt(json['total']) ?? 0;
     final limit = (asInt(json['limit']) ?? 20).clamp(1, 1 << 20);
@@ -364,8 +416,6 @@ class ContactPage {
       total: total,
       page: skip ~/ limit + 1,
       totalPages: total == 0 ? 1 : (total + limit - 1) ~/ limit,
-      leadsCount: leadsCount,
-      awarenessCount: awarenessCount,
     );
   }
 }

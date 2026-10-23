@@ -13,6 +13,9 @@ import 'package:provider/provider.dart';
 
 import 'test_helpers.dart';
 
+// Stub imports needed so ShellScreen can build its own providers.
+import 'package:ogera_crm_mobile/core/network/api_client.dart';
+
 /// Covers the shell: the bottom bar lists Home · Contacts · Tasks · Pipeline ·
 /// More, Tasks and Pipeline are placeholders, the centre button fans out the
 /// quick actions (Add expense only for staff), and the bar keeps its layout at
@@ -44,16 +47,14 @@ void main() {
     await _settle(tester);
     expect(find.widgetWithText(AppBar, 'Contacts'), findsOneWidget);
 
-    // Placeholder tabs say what is coming instead of an empty screen.
+    // Tasks and Pipeline are now live tabs (no longer placeholders).
     await tester.tap(_navLabel('Tasks'));
     await _settle(tester);
     expect(find.widgetWithText(AppBar, 'Tasks'), findsOneWidget);
-    expect(find.text('Coming soon'), findsOneWidget);
 
     await tester.tap(_navLabel('Pipeline'));
     await _settle(tester);
     expect(find.widgetWithText(AppBar, 'Pipeline'), findsOneWidget);
-    expect(find.text('Coming soon'), findsOneWidget);
 
     await tester.tap(_navLabel('More'));
     await _settle(tester);
@@ -170,6 +171,14 @@ Future<Widget> _shellHarness({required UserRole role}) async {
     '/contacts/stage-types': (_) => [
       stageJson(id: 'new', label: 'New', orderIndex: 0),
     ],
+    '/pipeline/contacts': (_) => {
+      'items': <Map<String, dynamic>>[],
+      'total': 0,
+    },
+    '/notifications': (_) => {
+      'items': <Map<String, dynamic>>[],
+      'unread_count': 0,
+    },
     // Home tab's KPI and attendance loads.
     '/dashboard/summary': (_) => {
       'kpis': {
@@ -199,6 +208,9 @@ Future<Widget> _shellHarness({required UserRole role}) async {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<SessionViewModel>.value(value: session),
+      // ApiClient is provided so ShellScreen can build TasksService,
+      // PipelineService, and NotificationService inside its own MultiProvider.
+      Provider<ApiClient>.value(value: api),
       Provider<ContactsService>(create: (_) => ContactsService(api)),
       Provider<ProfessionalsService>(create: (_) => ProfessionalsService(api)),
       Provider<FollowupsService>(create: (_) => FollowupsService(api)),

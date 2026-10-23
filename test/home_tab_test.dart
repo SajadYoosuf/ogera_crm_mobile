@@ -6,8 +6,10 @@ import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 import 'package:ogera_crm_mobile/services/home_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
+import 'package:ogera_crm_mobile/services/notification_service.dart';
 import 'package:ogera_crm_mobile/view_models/followups_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/home_view_model.dart';
+import 'package:ogera_crm_mobile/view_models/notification_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/home/home_tab.dart';
 import 'package:provider/provider.dart';
@@ -106,6 +108,7 @@ ApiClient _api({
       },
     },
     '/attendance/today': (_) => null,
+    '/notifications': (_) => {'items': <Map<String, dynamic>>[], 'unread_count': 0},
   });
 }
 
@@ -126,12 +129,15 @@ Future<void> _pumpHome(
   final session = SessionViewModel(auth: FakeAuthService(), api: api);
   await session.adopt(AuthSession(accessToken: 'token', user: user));
 
+  final notifications = NotificationViewModel(NotificationService(api));
+
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<SessionViewModel>.value(value: session),
         ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
         ChangeNotifierProvider<HomeViewModel>.value(value: home),
+        ChangeNotifierProvider<NotificationViewModel>.value(value: notifications),
       ],
       child: MaterialApp(theme: AppTheme.build(), home: const HomeTab()),
     ),

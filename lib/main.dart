@@ -10,7 +10,9 @@ import 'services/expense_service.dart';
 import 'services/geocoding_service.dart';
 import 'services/home_service.dart';
 import 'services/location_streaming_service.dart';
+import 'services/employees_service.dart';
 import 'services/password_reset_service.dart';
+import 'services/products_service.dart';
 import 'theme/app_theme.dart';
 import 'view_models/forgot_password_view_model.dart';
 import 'view_models/login_view_model.dart';
@@ -68,6 +70,12 @@ class OgeraCrmApp extends StatelessWidget {
         ),
         ProxyProvider<ApiClient, ExpenseService>(
           update: (_, api, _) => ExpenseService(api),
+        ),
+        ProxyProvider<ApiClient, ProductsService>(
+          update: (_, api, _) => ProductsService(api),
+        ),
+        ProxyProvider<ApiClient, EmployeesService>(
+          update: (_, api, _) => EmployeesService(api),
         ),
 
         ChangeNotifierProvider<SessionViewModel>(

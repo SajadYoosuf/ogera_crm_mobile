@@ -64,9 +64,14 @@ class _StaffScreenState extends State<StaffScreen> {
     }
   }
 
+  static const _hiddenRoles = {'admin', 'manager'};
+
   List<EmployeeDirectoryEntry> get _filtered {
-    if (_query.isEmpty) return _staff;
-    return _staff
+    final visible = _staff
+        .where((s) => !_hiddenRoles.contains(s.role.toLowerCase()))
+        .toList();
+    if (_query.isEmpty) return visible;
+    return visible
         .where(
           (s) =>
               s.name.toLowerCase().contains(_query) ||

@@ -70,13 +70,16 @@ Map<String, dynamic> pageOf(
   'limit': limit,
 };
 
-/// A `GET /contacts` row. `type` is the mobile kind: `lead` or `awareness`
-/// (both are API consumers, told apart by `awareness_mode`).
+/// A `GET /contacts` row. `kind` is the API's `contact_type` (`consumer`,
+/// `partner` or `dealer`). `type` is the older lead/awareness flag, kept for
+/// the form and detail screens: both are API consumers, told apart by
+/// `awareness_mode`.
 Map<String, dynamic> contactJson({
   required int id,
   String? name,
   String phone = '9876543210',
   String type = 'lead',
+  String kind = 'consumer',
   String? district,
   String? stage,
   int? createdBy,
@@ -84,7 +87,7 @@ Map<String, dynamic> contactJson({
   String createdAt = '2026-01-01T00:00:00',
 }) => {
   'id': id,
-  'contact_type': 'consumer',
+  'contact_type': kind,
   'name': name ?? 'Contact $id',
   'phone': phone,
   'district': district ?? 'Calicut',

@@ -148,7 +148,7 @@ class _TaskStatusSheetState extends State<_TaskStatusSheet> {
                             border: Border.all(
                               color: _selected == s
                                   ? OgeraColors.blue
-                                  : OgeraColors.border,
+                                  : OgeraColors.line,
                               width: 2,
                             ),
                           ),

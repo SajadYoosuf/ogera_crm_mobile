@@ -130,76 +130,48 @@ class ContactsService {
   Future<Map<String, String>> houseStages() =>
       _options.options('house_stage', fallback: CrmOptions.defaultHouseStages);
 
-  /// Mobile contacts are the API's consumers; [type] picks lead vs awareness
-  /// through the consumer profile's `awareness_mode`.
+  /// One page of contacts for the Contacts tab and other list screens.
   ///
-  /// [withCounts] makes one extra one-row request so both tab badges can show
-  /// a total; without it only the shown kind's count is filled in.
+  /// [kind] picks one type. It is a default parameter, so leaving it out gives
+  /// consumers only (the pipeline relies on this). Passing `kind: null`
+  /// explicitly asks for every type, which is what the "All Contacts" tab does.
   Future<ContactPage> list({
+    ContactKind? kind = ContactKind.consumer,
     String? query,
-    ContactType? type,
     String? source,
     String? startDate,
     String? endDate,
     String? addedBy,
     int page = 1,
     int limit = 20,
-    bool withCounts = false,
   }) async {
     var sourceId = await _sources.idFor(source);
     // An unknown source can match nothing; -1 keeps the filter honest.
     if (source != null && source.isNotEmpty && sourceId == null) sourceId = -1;
 
-    Map<String, dynamic> filters([ContactType? kind]) => {
-      'contact_type': 'consumer',
-      'awareness_mode': kind?.awarenessMode,
-      'search': query,
-      'lead_source_id': sourceId,
-      'created_from': startDate,
-      'created_to': endDate,
-      // The performance drill-down asks for the contacts nobody is recorded
-      // as having added.
-      'created_by': addedBy == 'unattributed' ? null : addedBy,
-      'unattributed': addedBy == 'unattributed' ? true : null,
-    };
-
-    final main = asMap(
-      await _api.get(
-        '/contacts',
-        query: {...filters(type), 'skip': (page - 1) * limit, 'limit': limit},
-      ),
+    final data = await _api.get(
+      '/contacts',
+      query: {
+        if (kind != null) 'contact_type': kind.id,
+        'search': query,
+        'lead_source_id': sourceId,
+        'created_from': startDate,
+        'created_to': endDate,
+        // The performance drill-down asks for the contacts nobody is recorded
+        // as having added.
+        'created_by': addedBy == 'unattributed' ? null : addedBy,
+        'unattributed': addedBy == 'unattributed' ? true : null,
+        'skip': (page - 1) * limit,
+        'limit': limit,
+      },
     );
-    final shown = asInt(main['total']) ?? 0;
+    return ContactPage.fromJson(asMap(data));
+  }
 
-    var other = 0;
-    if (withCounts) {
-      final otherKind = type == ContactType.awareness
-          ? ContactType.lead
-          : ContactType.awareness;
-      final count = asMap(
-        await _api.get('/contacts', query: {...filters(otherKind), 'limit': 1}),
-      );
-      other = asInt(count['total']) ?? 0;
-    }
-
-    final int leads;
-    final int awareness;
-    switch (type) {
-      case ContactType.awareness:
-        awareness = shown;
-        leads = other;
-      case ContactType.lead:
-        leads = shown;
-        awareness = other;
-      case null:
-        awareness = other;
-        leads = shown - other;
-    }
-    return ContactPage.fromJson(
-      main,
-      leadsCount: leads,
-      awarenessCount: awareness,
-    );
+  /// Totals per contact type for the tab badges. Ignores search and filters.
+  Future<ContactTypeCounts> typeCounts() async {
+    final data = await _api.get('/contacts/type-counts');
+    return ContactTypeCounts.fromJson(asMap(data));
   }
 
   Future<List<ContactPin>> mapPins({ContactType? type}) async {

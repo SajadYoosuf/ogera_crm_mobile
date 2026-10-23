@@ -1,11 +1,20 @@
 /// Tasks service.
 ///
-/// Wraps:
-///   GET /tasks  — paginated task list with optional filters
-///   PATCH /tasks/{id}  — update a task's status or scheduled time
+/// WHAT IT DOES:
+///   Wraps GET /tasks and PATCH /tasks/{id}.
 ///
-/// A Task has a type (call, visit, follow_up, demo, other), a priority
-/// (low, medium, high), and a status (todo, in_progress, completed).
+/// BACKEND CONTRACT (as of the current FastAPI backend):
+///   GET /tasks response item fields:
+///     id, title, type, notes, status ("pending"|"done"), priority,
+///     scheduled_date (YYYY-MM-DD), scheduled_time (HH:MM:SS),
+///     task_state ("pending"|"due_today"|"overdue"|"done"),
+///     overdue_days, contact_id, contact_name, contact_phone, contact_type,
+///     assigned_to, created_at
+///
+///   PATCH /tasks/{id} body: { status?, outcome?, notes?, due_at? }
+///     - status is one of: todo, inprogress, completed, pending
+///     - outcome is REQUIRED when status=completed
+///     - due_at is for reschedule (mutually exclusive with status)
 library;
 
 import '../core/network/api_client.dart';
@@ -15,19 +24,32 @@ import '../core/utils/formatters.dart';
 // Domain types
 // ---------------------------------------------------------------------------
 
+/// Display status values understood by the UI.
+///
+/// The backend returns "pending" or "done" in the response, but accepts
+/// "todo", "inprogress", "completed" on PATCH. We keep all values here
+/// and translate as needed.
 enum TaskStatus {
   todo('todo', 'To Do'),
-  inProgress('in_progress', 'In Progress'),
+  inProgress('inprogress', 'In Progress'),
   completed('completed', 'Completed');
 
   const TaskStatus(this.value, this.label);
+
+  /// The value sent to the backend on PATCH.
   final String value;
   final String label;
 
-  static TaskStatus fromValue(String value) => TaskStatus.values.firstWhere(
-    (s) => s.value == value,
-    orElse: () => TaskStatus.todo,
-  );
+  /// Map the backend response status ("pending" or "done") to a UI status.
+  static TaskStatus fromResponseStatus(String status) {
+    switch (status) {
+      case 'done':
+        return TaskStatus.completed;
+      case 'pending':
+      default:
+        return TaskStatus.todo;
+    }
+  }
 }
 
 enum TaskPriority {
@@ -45,51 +67,120 @@ enum TaskPriority {
   );
 }
 
+/// Task state from the backend — used for visual cues (overdue badge etc.).
+enum TaskState {
+  pending,
+  dueToday,
+  overdue,
+  done;
+
+  static TaskState fromValue(String value) {
+    switch (value) {
+      case 'due_today':
+        return TaskState.dueToday;
+      case 'overdue':
+        return TaskState.overdue;
+      case 'done':
+        return TaskState.done;
+      case 'pending':
+      default:
+        return TaskState.pending;
+    }
+  }
+}
+
 /// A single CRM task.
 ///
-/// [contactId] and [contactName] may be null if the task is not linked to
-/// a lead/contact.
+/// Maps directly to one item in GET /tasks → items[].
 class Task {
   const Task({
     required this.id,
-    required this.title,
-    this.description,
+    this.title,
     required this.taskType,
-    required this.priority,
+    this.notes,
     required this.status,
-    this.scheduledAt,
+    required this.priority,
+    required this.scheduledDate,
+    required this.scheduledTime,
+    required this.taskState,
+    required this.overdueDays,
     this.contactId,
     this.contactName,
-    this.notes,
+    this.contactPhone,
+    this.contactType,
+    required this.assignedTo,
     required this.createdAt,
   });
 
   final int id;
-  final String title;
-  final String? description;
+  final String? title;
   final String taskType;
-  final TaskPriority priority;
+  final String? notes;
   final TaskStatus status;
-  final DateTime? scheduledAt;
+  final TaskPriority priority;
+
+  /// Date string YYYY-MM-DD from the backend.
+  final String scheduledDate;
+
+  /// Time string HH:MM:SS from the backend.
+  final String scheduledTime;
+  final TaskState taskState;
+  final int overdueDays;
   final int? contactId;
   final String? contactName;
-  final String? notes;
+  final String? contactPhone;
+  final String? contactType;
+  final int assignedTo;
   final DateTime createdAt;
 
+  /// The combined scheduled date+time as a [DateTime].
+  DateTime get scheduledAt {
+    try {
+      return DateTime.parse('${scheduledDate}T$scheduledTime');
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
   factory Task.fromJson(Map<String, dynamic> json) => Task(
-    id: json['id'] as int,
-    title: json['title'] as String,
-    description: json['description'] as String?,
-    taskType: asText(json['task_type']) ?? 'other',
-    priority: TaskPriority.fromValue(json['priority'] as String? ?? 'medium'),
-    status: TaskStatus.fromValue(json['status'] as String? ?? 'todo'),
-    scheduledAt: json['scheduled_at'] != null
-        ? DateTime.tryParse(json['scheduled_at'] as String)
-        : null,
-    contactId: json['contact_id'] as int?,
-    contactName: json['contact_name'] as String?,
-    notes: json['notes'] as String?,
-    createdAt: DateTime.parse(json['created_at'] as String),
+    id: asInt(json['id']) ?? 0,
+    title: asText(json['title']),
+    taskType: asText(json['type']) ?? 'other',
+    notes: asText(json['notes']),
+    status: TaskStatus.fromResponseStatus(asText(json['status']) ?? 'pending'),
+    priority: TaskPriority.fromValue(asText(json['priority']) ?? 'medium'),
+    scheduledDate: asText(json['scheduled_date']) ?? '',
+    scheduledTime: asText(json['scheduled_time']) ?? '00:00:00',
+    taskState: TaskState.fromValue(asText(json['task_state']) ?? 'pending'),
+    overdueDays: asInt(json['overdue_days']) ?? 0,
+    contactId: asInt(json['contact_id']),
+    contactName: asText(json['contact_name']),
+    contactPhone: asText(json['contact_phone']),
+    contactType: asText(json['contact_type']),
+    assignedTo: asInt(json['assigned_to']) ?? 0,
+    createdAt: DateTime.tryParse(asText(json['created_at']) ?? '') ?? DateTime.now(),
+  );
+}
+
+/// Summary counts returned by GET /tasks.
+class TaskSummary {
+  const TaskSummary({
+    required this.overdue,
+    required this.today,
+    required this.upcoming,
+    required this.done,
+  });
+
+  final int overdue;
+  final int today;
+  final int upcoming;
+  final int done;
+
+  factory TaskSummary.fromJson(Map<String, dynamic> json) => TaskSummary(
+    overdue: asInt(json['overdue']) ?? 0,
+    today: asInt(json['today']) ?? 0,
+    upcoming: asInt(json['upcoming']) ?? 0,
+    done: asInt(json['done']) ?? 0,
   );
 }
 
@@ -102,46 +193,56 @@ class TasksService {
 
   final ApiClient _api;
 
-  /// Returns a paged list of tasks.
+  /// Returns a paged list of tasks with a summary.
   ///
-  /// All filters are optional. [date] is an ISO date (YYYY-MM-DD) to filter
-  /// tasks scheduled on that day. Pass null to get all tasks.
-  Future<({List<Task> items, int total})> list({
-    TaskStatus? status,
+  /// [dateFrom]/[dateTo] are ISO date strings (YYYY-MM-DD).
+  /// [status] accepts "open", "todo", "inprogress", "completed", "all",
+  /// "due_today", "overdue".
+  Future<({List<Task> items, int total, TaskSummary summary})> list({
+    String statusFilter = 'open',
     TaskPriority? priority,
-    String? date,
+    String? dateFrom,
+    String? dateTo,
+    bool includeOverdue = false,
     int skip = 0,
     int limit = 50,
   }) async {
     final query = <String, dynamic>{
       'skip': skip,
       'limit': limit,
-      if (status != null) 'status': status.value,
+      'status': statusFilter,
       if (priority != null) 'priority': priority.value,
-      if (date != null) 'date': date,
+      if (dateFrom != null) 'date_from': dateFrom,
+      if (dateTo != null) 'date_to': dateTo,
+      if (includeOverdue) 'include_overdue': true,
     };
     final data = asMap(await _api.get('/tasks', query: query));
     final items = asList(data['items']).map(Task.fromJson).toList();
     final total = asInt(data['total']) ?? items.length;
-    return (items: items, total: total);
+    final summary = TaskSummary.fromJson(asMap(data['summary']));
+    return (items: items, total: total, summary: summary);
   }
 
-  /// Updates a task's status and/or scheduled time.
+  /// Marks a task complete with an outcome.
   ///
-  /// [id] is the task's database id.
-  /// Only the fields you pass are sent; null values are omitted.
-  Future<Task> update(
-    int id, {
-    TaskStatus? status,
-    String? scheduledAt,
-    String? notes,
-  }) async {
-    final body = <String, dynamic>{
-      if (status != null) 'status': status.value,
-      if (scheduledAt != null) 'scheduled_at': scheduledAt,
-      if (notes != null) 'notes': notes,
-    };
-    final data = asMap(await _api.patch('/tasks/$id', body: body));
-    return Task.fromJson(data);
+  /// [outcome] is required by the backend when marking completed.
+  Future<void> complete(int id, {required String outcome, String? notes}) async {
+    await _api.patch('/tasks/$id', body: {
+      'status': 'completed',
+      'outcome': outcome,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
+  /// Changes a task's status (todo ↔ inprogress).
+  Future<void> updateStatus(int id, TaskStatus status) async {
+    await _api.patch('/tasks/$id', body: {'status': status.value});
+  }
+
+  /// Reschedules a task to a new date/time.
+  ///
+  /// [dueAt] is an ISO-8601 datetime string (e.g. "2026-10-25T14:00:00").
+  Future<void> reschedule(int id, String dueAt) async {
+    await _api.patch('/tasks/$id', body: {'due_at': dueAt});
   }
 }

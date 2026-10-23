@@ -103,14 +103,20 @@ class MoreTab extends StatelessWidget {
                 caption: user.isHead
                     ? 'Review and approve staff expenses'
                     : 'Your submitted expense claims',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (ctx) => ChangeNotifierProvider.value(
-                      value: ctx.read<ExpenseViewModel>(),
-                      child: const ExpensesScreen(),
+                onTap: () {
+                  // Read the view model here, while `context` still sits under
+                  // the shell's providers. A pushed route is built under the
+                  // Navigator instead, so reading inside its builder fails.
+                  final expenseVm = context.read<ExpenseViewModel>();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: expenseVm,
+                        child: const ExpensesScreen(),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),
