@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_media_type;
 
 import '../config/app_config.dart';
 
@@ -115,6 +116,68 @@ class ApiClient {
 
   Future<dynamic> delete(String path, {Object? body}) {
     return _send('DELETE', path, body: body);
+  }
+
+  /// Uploads a single file as multipart/form-data.
+  ///
+  /// [path] is the API endpoint (e.g. '/expenses/1/bill-photo').
+  /// [fieldName] is the form field the server expects (usually 'file').
+  /// [filePath] is the local path to the file on disk.
+  /// [mimeType] is the MIME type (e.g. 'image/jpeg').
+  ///
+  /// Returns the parsed JSON response, same as the other methods.
+  Future<dynamic> postFile(
+    String path, {
+    required String fieldName,
+    required String filePath,
+    required String mimeType,
+    Map<String, String>? fields,
+  }) async {
+    final uri = _resolve(path, null);
+    final request = http.MultipartRequest('POST', uri);
+    if (hasToken) {
+      request.headers['Authorization'] = 'Bearer $_accessToken';
+    }
+    request.headers['x-client-type'] = 'mobile';
+    if (fields != null) request.fields.addAll(fields);
+
+    final parts = mimeType.split('/');
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        fieldName,
+        filePath,
+        contentType: http_media_type.MediaType(
+          parts.first,
+          parts.length > 1 ? parts[1] : '*',
+        ),
+      ),
+    );
+
+    _log('--> POST (multipart) $uri${hasToken ? '  (authorised)' : '  (no token)'}');
+    final clock = Stopwatch()..start();
+
+    http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(_timeout);
+      response = await http.Response.fromStream(streamed);
+    } on TimeoutException {
+      _log('<-- POST $uri  TIMEOUT after ${clock.elapsedMilliseconds} ms');
+      throw const ApiException('The server took too long to respond.');
+    } catch (error) {
+      _log(
+        '<-- POST $uri  NETWORK ERROR after ${clock.elapsedMilliseconds} ms'
+        ' | ${error.runtimeType}: $error',
+      );
+      throw const ApiException(
+        'Network problem. Check your connection and try again.',
+      );
+    }
+
+    _log(
+      '<-- POST ${uri.path} ${response.statusCode}'
+      '  ${clock.elapsedMilliseconds} ms, ${response.bodyBytes.length} bytes',
+    );
+    return _unwrap(response);
   }
 
   Future<dynamic> _send(
