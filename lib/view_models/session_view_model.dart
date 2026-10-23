@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../core/network/api_client.dart';
+import '../core/services/firebase_service.dart';
 import '../models/auth_session.dart';
 import '../services/auth_service.dart';
 
@@ -62,6 +63,8 @@ class SessionViewModel extends ChangeNotifier {
     _session = session;
     _expiryNotice = null;
     _set(SessionStatus.ready);
+    // Register FCM token in the background — never block the UI for this.
+    unawaited(FirebaseService.init(jwtToken: session.accessToken));
   }
 
   Future<void> signOut() async {
