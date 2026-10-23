@@ -1,30 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/network/api_client.dart';
 import '../services/crm_services.dart';
 import '../services/expense_service.dart';
 import '../services/home_service.dart';
+import '../services/notification_service.dart';
+import '../services/pipeline_service.dart';
+import '../services/tasks_service.dart';
 import '../theme/ogera_colors.dart';
 import '../view_models/contacts_view_model.dart';
 import '../view_models/expense_view_model.dart';
 import '../view_models/followups_view_model.dart';
 import '../view_models/home_view_model.dart';
+import '../view_models/notification_view_model.dart';
+import '../view_models/pipeline_view_model.dart';
 import '../view_models/professionals_view_model.dart';
 import '../view_models/session_view_model.dart';
+import '../view_models/tasks_view_model.dart';
 import 'contacts/contact_form_screen.dart';
 import 'contacts/contacts_tab.dart';
 import 'home/home_tab.dart';
 import 'home/quick_action_sheets.dart';
 import 'more/more_tab.dart';
+import 'pipeline/pipeline_tab.dart';
 import 'professionals/professional_form_screen.dart';
-import 'shared/coming_soon_tab.dart';
+import 'tasks/tasks_tab.dart';
 import 'shell_scope.dart';
 
 /// Signed-in shell: bottom bar, a centre-docked quick-action button, and the
 /// module view models the tabs share.
 ///
 /// Tab order: Home · Contacts · Tasks · Pipeline · More.
-/// Tasks and Pipeline are placeholders until Sprints 2 and 3.
+/// Tasks is a placeholder until Sprint 2; Pipeline is live from Sprint 3.
 ///
 /// The centre button fans out three circle buttons: Add contact, Activity log,
 /// and Add expense (staff only). Module view models are provided here, not per
@@ -97,6 +105,21 @@ class _ShellScreenState extends State<ShellScreen>
         ChangeNotifierProvider(
           create: (context) => ExpenseViewModel(context.read<ExpenseService>()),
         ),
+        ChangeNotifierProvider(
+          create: (context) => PipelineViewModel(
+            PipelineService(context.read<ApiClient>()),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => TasksViewModel(
+            TasksService(context.read<ApiClient>()),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => NotificationViewModel(
+            NotificationService(context.read<ApiClient>()),
+          ),
+        ),
       ],
       child: Builder(
         builder: (context) {
@@ -139,6 +162,7 @@ class _ShellScreenState extends State<ShellScreen>
                         onActivate: () {
                           context.read<HomeViewModel>().load();
                           context.read<FollowupsViewModel>().load();
+                          context.read<NotificationViewModel>().load();
                         },
                         child: const HomeTab(),
                       ),
@@ -148,13 +172,17 @@ class _ShellScreenState extends State<ShellScreen>
                             context.read<ContactsViewModel>().load(),
                         child: const ContactsTab(),
                       ),
-                      const ComingSoonTab(
-                        title: 'Tasks',
-                        icon: Icons.check_circle_outline_rounded,
+                      _LazyTab(
+                        active: _index == 2,
+                        onActivate: () =>
+                            context.read<TasksViewModel>().load(),
+                        child: const TasksTab(),
                       ),
-                      const ComingSoonTab(
-                        title: 'Pipeline',
-                        icon: Icons.view_kanban_outlined,
+                      _LazyTab(
+                        active: _index == 3,
+                        onActivate: () =>
+                            context.read<PipelineViewModel>().load(),
+                        child: const PipelineTab(),
                       ),
                       const MoreTab(),
                     ],

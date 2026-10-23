@@ -10,6 +10,7 @@ import '../../view_models/followups_view_model.dart';
 import '../../view_models/home_view_model.dart';
 import '../../view_models/session_view_model.dart';
 import '../followups/lead_detail_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../shell_scope.dart';
 import 'checkin_button.dart';
 import 'stats_row.dart';
@@ -92,7 +93,10 @@ class _StaffHome extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(
+        title: const Text('Home'),
+        actions: const [NotificationBellButton(), SizedBox(width: 4)],
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           await Future.wait([home.load(), followups.refresh()]);

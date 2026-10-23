@@ -3,8 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
+import '../../view_models/expense_view_model.dart';
 import '../../view_models/session_view_model.dart';
+import 'expenses_screen.dart';
+import 'products_screen.dart';
 import 'profile_screen.dart';
+import 'staff_screen.dart';
 
 /// Everything that does not earn a permanent tab.
 ///
@@ -41,6 +45,78 @@ class MoreTab extends StatelessWidget {
           ),
           const SizedBox(height: 22),
 
+          // — Catalogue ——————————————————————————————————————————————————
+          const SectionHeader(
+            title: 'Catalogue',
+            icon: Icons.inventory_2_outlined,
+          ),
+          _MenuGroup(
+            items: [
+              _MenuItem(
+                icon: Icons.inventory_2_outlined,
+                color: OgeraColors.blue,
+                label: 'Products',
+                caption: 'Browse the full product catalogue',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProductsScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+
+          // — Team ———————————————————————————————————————————————————————
+          const SectionHeader(
+            title: 'Team',
+            icon: Icons.people_outline_rounded,
+          ),
+          _MenuGroup(
+            items: [
+              _MenuItem(
+                icon: Icons.people_outline_rounded,
+                color: OgeraColors.forestInteractive,
+                label: 'Employees',
+                caption: 'View the staff directory',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const StaffScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+
+          // — Expenses ———————————————————————————————————————————————————
+          const SectionHeader(
+            title: 'Expenses',
+            icon: Icons.receipt_long_outlined,
+          ),
+          _MenuGroup(
+            items: [
+              _MenuItem(
+                icon: Icons.receipt_long_outlined,
+                color: OgeraColors.warning,
+                label: 'Expense claims',
+                caption: user.isHead
+                    ? 'Review and approve staff expenses'
+                    : 'Your submitted expense claims',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (ctx) => ChangeNotifierProvider.value(
+                      value: ctx.read<ExpenseViewModel>(),
+                      child: const ExpensesScreen(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+
+          // — Account ————————————————————————————————————————————————————
           const SectionHeader(
             title: 'Account',
             icon: Icons.person_outline_rounded,

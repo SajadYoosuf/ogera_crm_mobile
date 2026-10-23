@@ -1,85 +1,115 @@
-/// PipelineViewModel manages the Pipeline tab's state.
+/// PipelineViewModel manages state for the Pipeline tab.
 ///
-/// The pipeline tab shows contacts grouped by stage. The user switches
-/// between three contact types (Consumer, Partner, Dealer) via top chips,
-/// then optionally filters by stage.
+/// ## What the Pipeline tab shows
+/// The user sees contacts bucketed into pipeline stages for one contact type
+/// at a time. They switch between Consumer, Partner and Dealer with chips at
+/// the top. Below that, a horizontal stage strip lets them focus on one stage.
 ///
-/// Consumer contacts → ContactsService (GET /contacts?contact_type=consumer)
-/// Partner contacts  → ProfessionalsService (GET /contacts?contact_type=partner
-///                       &profession_type=partner)
-/// Dealer contacts   → ProfessionalsService (GET /contacts?contact_type=partner
-///                       &profession_type=dealer)
+/// ## How it works
+/// 1. `load()` is called when the tab becomes active (or when the user pulls
+///    down to refresh).
+/// 2. It fetches the ordered stages for the current contact type from
+///    `GET /pipeline/stages?contact_type=...`.
+/// 3. It fetches all matching contacts from `GET /contacts?contact_type=...`.
+/// 4. It buckets the contacts into stages by matching `contact.stageSlug` to
+///    `stage.slug`. Contacts without a stage go into `_unstaged`.
+/// 5. Selecting a stage chip calls `selectStage()`, which flips the list.
+///    Selecting "All" clears the filter and shows every contact.
 ///
-/// The backend returns all rows; this view model extracts the distinct stages
-/// and exposes them as chip options.
+/// ## Why bucket locally instead of fetching per stage?
+/// The stage count badges (e.g. "New Lead 12") need counts for every stage at
+/// once. One request is cheaper than N parallel requests.
 library;
 
 import 'package:flutter/foundation.dart';
 
-import '../services/crm_services.dart';
+import '../services/pipeline_service.dart';
 
-/// The three contact types shown on the Pipeline tab.
+// ─── contact type enum ─────────────────────────────────────────────────────
+
+/// Which of the three contact-type boards is open.
 enum PipelineContactType {
-  consumer('Consumer'),
-  partner('Partner'),
-  dealer('Dealer');
+  consumer('Consumer', 'consumer'),
+  partner('Partner', 'partner'),
+  dealer('Dealer', 'dealer');
 
-  const PipelineContactType(this.label);
+  const PipelineContactType(this.label, this.apiValue);
+
   final String label;
+  final String apiValue; // the value sent in contact_type= query param
 }
 
-/// A slim row the pipeline card needs, regardless of whether the underlying
-/// record is a Contact (consumer) or a Professional (partner/dealer).
-class PipelineEntry {
-  const PipelineEntry({
-    required this.id,
-    required this.name,
-    required this.phone,
-    this.stage,
-  });
-
-  final int id;
-  final String? name;
-  final String phone;
-  final String? stage;
-}
+// ─── view model ────────────────────────────────────────────────────────────
 
 class PipelineViewModel extends ChangeNotifier {
-  PipelineViewModel({
-    required ContactsService contactsService,
-    required ProfessionalsService professionalsService,
-  }) : _contacts = contactsService,
-       _professionals = professionalsService;
+  PipelineViewModel(this._service);
 
-  final ContactsService _contacts;
-  final ProfessionalsService _professionals;
+  final PipelineService _service;
+
+  // ── state ────────────────────────────────────────────────────────────────
 
   bool _isLoading = false;
   String? _error;
 
-  final List<PipelineEntry> _entries = [];
-  PipelineContactType _contactType = PipelineContactType.consumer;
-  List<String> _stages = [];
-  String? _selectedStage;
+  PipelineContactType _activeType = PipelineContactType.consumer;
 
-  List<PipelineEntry> get entries {
-    if (_selectedStage == null) return List.unmodifiable(_entries);
-    return _entries.where((e) => e.stage == _selectedStage).toList();
-  }
+  /// Ordered stages from the API for the current contact type.
+  List<PipelineStageModel> _stages = [];
+
+  /// All contacts for the current type, unsorted.
+  List<PipelineContact> _contacts = [];
+
+  /// The selected stage. Null means "All" — show every contact.
+  PipelineStageModel? _selectedStage;
+
+  // ── getters ──────────────────────────────────────────────────────────────
 
   bool get isLoading => _isLoading;
   String? get error => _error;
-  PipelineContactType get contactType => _contactType;
-  List<String> get stages => List.unmodifiable(_stages);
-  String? get selectedStage => _selectedStage;
+  PipelineContactType get activeType => _activeType;
+  List<PipelineStageModel> get stages => List.unmodifiable(_stages);
+  PipelineStageModel? get selectedStage => _selectedStage;
 
-  /// Loads entries for the current contact type.
+  /// The contacts shown in the list.
+  ///
+  /// When [_selectedStage] is null (the "All" pseudo-stage), every contact is
+  /// returned. Otherwise only contacts whose stageSlug matches.
+  List<PipelineContact> get visibleContacts {
+    final sel = _selectedStage;
+    if (sel == null) return List.unmodifiable(_contacts);
+    return _contacts.where((c) => c.stageSlug == sel.slug).toList();
+  }
+
+  /// How many contacts sit in [stage].
+  int countInStage(PipelineStageModel stage) =>
+      _contacts.where((c) => c.stageSlug == stage.slug).length;
+
+  /// Total contacts loaded (across all stages).
+  int get totalCount => _contacts.length;
+
+  // ── public actions ───────────────────────────────────────────────────────
+
+  /// Initial load and pull-to-refresh.
   Future<void> load() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
     try {
-      await _fetchEntries();
+      final typeValue = _activeType.apiValue;
+      final results = await Future.wait([
+        _service.stages(typeValue),
+        _service.contacts(typeValue),
+      ]);
+      _stages = results[0] as List<PipelineStageModel>;
+      _contacts = results[1] as List<PipelineContact>;
+      // Keep selected stage valid after reload.
+      if (_selectedStage != null) {
+        _selectedStage = _stages.firstWhere(
+          (s) => s.slug == _selectedStage!.slug,
+          orElse: () => _stages.isNotEmpty ? _stages.first : _selectedStage!,
+        );
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -88,66 +118,25 @@ class PipelineViewModel extends ChangeNotifier {
     }
   }
 
-  /// Switches the active contact type and reloads.
+  /// Switches to a different contact type and reloads.
   Future<void> setContactType(PipelineContactType type) async {
-    if (_contactType == type) return;
-    _contactType = type;
+    if (_activeType == type) return;
+    _activeType = type;
     _selectedStage = null;
     _stages = [];
-    _entries.clear();
+    _contacts = [];
+    notifyListeners();
     await load();
   }
 
-  /// Filters by a stage chip. Passing the same stage again clears the filter.
-  void setStage(String? stage) {
-    _selectedStage = (_selectedStage == stage) ? null : stage;
-    notifyListeners();
-  }
-
-  Future<void> _fetchEntries() async {
-    _entries.clear();
-
-    if (_contactType == PipelineContactType.consumer) {
-      final page = await _contacts.list(limit: 200);
-      _entries.addAll(
-        page.contacts.map(
-          (c) => PipelineEntry(
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            stage: c.stage,
-          ),
-        ),
-      );
+  /// Selects a stage chip to focus the list. Calling with the same stage
+  /// again clears the filter back to "All".
+  void selectStage(PipelineStageModel? stage) {
+    if (stage == null || _selectedStage?.slug == stage.slug) {
+      _selectedStage = null;
     } else {
-      // Partners and dealers use the ProfessionalsService.
-      // profession_type values: 'partner' and 'dealer' are the sprint's two
-      // new categories. For now we pass the label as an apiValue fallback;
-      // the server ignores unknown profession_type values gracefully.
-      final rows = await _professionals.list();
-      final typeLabel = _contactType == PipelineContactType.partner
-          ? 'partner'
-          : 'dealer';
-      final filtered = rows.where((p) => p.type.apiValue == typeLabel).toList();
-      _entries.addAll(
-        filtered.map(
-          (p) => PipelineEntry(
-            id: p.id,
-            name: p.name,
-            phone: p.phone,
-            // Professionals have no stage field in this version.
-            stage: null,
-          ),
-        ),
-      );
+      _selectedStage = stage;
     }
-
-    // Collect distinct non-empty stage values for the chip row.
-    final seen = <String>{};
-    for (final e in _entries) {
-      final s = e.stage;
-      if (s != null && s.isNotEmpty) seen.add(s);
-    }
-    _stages = seen.toList();
+    notifyListeners();
   }
 }
