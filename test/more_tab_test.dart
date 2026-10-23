@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
+import 'package:ogera_crm_mobile/services/expense_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
+import 'package:ogera_crm_mobile/view_models/expense_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/more/more_tab.dart';
 import 'package:provider/provider.dart';

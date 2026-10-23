@@ -58,35 +58,32 @@ class MoreTab extends StatelessWidget {
                 label: 'Products',
                 caption: 'Browse the full product catalogue',
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProductsScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const ProductsScreen()),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 22),
-
-          // — Team ———————————————————————————————————————————————————————
-          const SectionHeader(
-            title: 'Team',
-            icon: Icons.people_outline_rounded,
-          ),
-          _MenuGroup(
-            items: [
-              _MenuItem(
-                icon: Icons.people_outline_rounded,
-                color: OgeraColors.forestInteractive,
-                label: 'Employees',
-                caption: 'View the staff directory',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const StaffScreen(),
+          // — Team (head only) ——————————————————————————————————————————
+          if (user.isHead) ...[
+            const SizedBox(height: 22),
+            const SectionHeader(
+              title: 'Team',
+              icon: Icons.people_outline_rounded,
+            ),
+            _MenuGroup(
+              items: [
+                _MenuItem(
+                  icon: Icons.people_outline_rounded,
+                  color: OgeraColors.forestInteractive,
+                  label: 'Staff directory',
+                  caption: 'View all active employees',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StaffScreen()),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: 22),
 
           // — Expenses ———————————————————————————————————————————————————

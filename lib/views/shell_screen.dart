@@ -106,14 +106,12 @@ class _ShellScreenState extends State<ShellScreen>
           create: (context) => ExpenseViewModel(context.read<ExpenseService>()),
         ),
         ChangeNotifierProvider(
-          create: (context) => PipelineViewModel(
-            PipelineService(context.read<ApiClient>()),
-          ),
+          create: (context) =>
+              PipelineViewModel(PipelineService(context.read<ApiClient>())),
         ),
         ChangeNotifierProvider(
-          create: (context) => TasksViewModel(
-            TasksService(context.read<ApiClient>()),
-          ),
+          create: (context) =>
+              TasksViewModel(TasksService(context.read<ApiClient>())),
         ),
         ChangeNotifierProvider(
           create: (context) => NotificationViewModel(
@@ -174,8 +172,7 @@ class _ShellScreenState extends State<ShellScreen>
                       ),
                       _LazyTab(
                         active: _index == 2,
-                        onActivate: () =>
-                            context.read<TasksViewModel>().load(),
+                        onActivate: () => context.read<TasksViewModel>().load(),
                         child: const TasksTab(),
                       ),
                       _LazyTab(
@@ -196,6 +193,14 @@ class _ShellScreenState extends State<ShellScreen>
                         child: const ColoredBox(color: Color(0x66000000)),
                       ),
                     ),
+                  // Above the dimmer, so the circle buttons get the taps.
+                  Positioned.fill(
+                    child: _FanLayer(
+                      animation: _fabController,
+                      open: _fabOpen,
+                      actions: actions,
+                    ),
+                  ),
                 ],
               ),
               floatingActionButtonLocation:
@@ -204,7 +209,6 @@ class _ShellScreenState extends State<ShellScreen>
                 animation: _fabController,
                 open: _fabOpen,
                 onToggle: () => _setFabOpen(!_fabOpen),
-                actions: actions,
               ),
               bottomNavigationBar: _NavBar(
                 index: _index,
@@ -371,64 +375,85 @@ class _FabAction {
 
 /// The one quick-action button, docked in the middle of the bottom bar.
 ///
-/// It sits in a 56px box with [Clip.none], so the circle buttons can sit above
-/// the bar. Each circle moves out from the centre as [animation] runs.
+/// It only opens and closes the fan. The fan is drawn by [_FanLayer] in the
+/// screen body: a widget can be tapped only inside its own box, and the circle
+/// buttons sit above this 56px button, so they must not live inside it.
 class _ShellFab extends StatelessWidget {
   const _ShellFab({
-    required this.animation,
     required this.open,
     required this.onToggle,
+    required this.animation,
+  });
+
+  final bool open;
+  final VoidCallback onToggle;
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton(
+      onPressed: onToggle,
+      tooltip: open ? 'Close quick actions' : 'Quick actions',
+      backgroundColor: OgeraColors.blue,
+      foregroundColor: Colors.white,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: RotationTransition(
+        turns: Tween<double>(begin: 0, end: 0.125).animate(animation),
+        child: const Icon(Icons.add_rounded, size: 27),
+      ),
+    );
+  }
+}
+
+/// Draws the circle buttons over the screen, above the dimmer.
+///
+/// The box is anchored to the bottom centre of the body, which is the centre
+/// of the docked button (the button sits on the top edge of the bar). Each
+/// circle starts there and moves out to its offset as [animation] runs.
+class _FanLayer extends StatelessWidget {
+  const _FanLayer({
+    required this.animation,
+    required this.open,
     required this.actions,
   });
 
   final Animation<double> animation;
   final bool open;
-  final VoidCallback onToggle;
   final List<_FabAction> actions;
 
   @override
   Widget build(BuildContext context) {
     final offsets = _fanOffsets(actions.length);
-    return SizedBox(
-      width: 56,
-      height: 56,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          for (var i = 0; i < actions.length; i++)
-            _FanButton(
-              animation: animation,
-              enabled: open,
-              offset: offsets[i],
-              action: actions[i],
-            ),
-          FloatingActionButton(
-            onPressed: onToggle,
-            tooltip: open ? 'Close quick actions' : 'Quick actions',
-            backgroundColor: OgeraColors.blue,
-            foregroundColor: Colors.white,
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: RotationTransition(
-              turns: Tween<double>(begin: 0, end: 0.125).animate(animation),
-              child: const Icon(Icons.add_rounded, size: 27),
-            ),
-          ),
-        ],
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SizedBox(
+        width: 320,
+        height: 200,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            for (var i = 0; i < actions.length; i++)
+              _FanButton(
+                animation: animation,
+                enabled: open,
+                offset: offsets[i],
+                action: actions[i],
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Where each circle ends up, measured from the centre of the button.
-  /// Negative y is up. The first button goes left, the middle one up, the
-  /// last right, so the arc stays clear of the bar's edges.
+  /// Where each circle ends up, measured from the centre of the docked button
+  /// to the bottom of that circle. Negative y is up. The first button goes
+  /// left, the middle one up, the last right, so the arc stays clear of the
+  /// bar's edges.
   static List<Offset> _fanOffsets(int count) => switch (count) {
-    1 => const [Offset(0, -96)],
-    2 => const [Offset(-72, -88), Offset(72, -88)],
-    _ => const [Offset(-96, -72), Offset(0, -112), Offset(96, -72)],
+    1 => const [Offset(0, -62)],
+    2 => const [Offset(-72, -54), Offset(72, -54)],
+    _ => const [Offset(-96, -38), Offset(0, -78), Offset(96, -38)],
   };
 }
 
@@ -457,20 +482,21 @@ class _FanButton extends StatelessWidget {
           if (animation.value == 0) return const SizedBox.shrink();
           // Ease the progress so the circles decelerate into place.
           final t = Curves.easeOutCubic.transform(animation.value);
-          return Opacity(
-            opacity: t,
-            child: Transform.translate(offset: offset * t, child: child),
+          // The translate is outside the opacity, so taps follow the circle
+          // as it moves.
+          return Transform.translate(
+            offset: offset * t,
+            child: Opacity(opacity: t, child: child),
           );
         },
-        // The label and circle are taller than the 56px FAB box. OverflowBox
-        // lets this button take its natural size and stay centred on the FAB.
-        child: OverflowBox(
-          maxWidth: 200,
-          maxHeight: 200,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The label is tappable too. Without this, a tap on the text
+            // reaches the dim backdrop, which closes the fan instead.
+            GestureDetector(
+              onTap: action.onTap,
+              child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: OgeraColors.ink,
@@ -486,26 +512,26 @@ class _FanButton extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
-              Material(
-                color: OgeraColors.surface,
-                elevation: 3,
-                shape: const CircleBorder(
-                  side: BorderSide(color: OgeraColors.line),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: action.onTap,
-                  customBorder: const CircleBorder(),
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Icon(action.icon, size: 22, color: OgeraColors.blue),
-                  ),
+            ),
+            const SizedBox(height: 4),
+            Material(
+              color: OgeraColors.surface,
+              elevation: 3,
+              shape: const CircleBorder(
+                side: BorderSide(color: OgeraColors.line),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: action.onTap,
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Icon(action.icon, size: 22, color: OgeraColors.blue),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
