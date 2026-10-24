@@ -139,12 +139,18 @@ class Lead {
       address: contact.address,
       district: contact.district,
       houseStage: contact.houseStage,
-      currentTank: contact.currentTank,
-      latitude: contact.latitude,
-      longitude: contact.longitude,
-      stage: contact.stage,
-      followupAssignedTo: contact.followupAssignedTo,
-      followupAssignedUserId: contact.followupAssignedUserId,
+      // currentTankType lives on the consumer sub-profile, not on Contact directly.
+      currentTank: contact.consumerProfile?.currentTankType,
+      // latitude/longitude are double? on Contact but String? on Lead.
+      latitude: contact.latitude?.toString(),
+      longitude: contact.longitude?.toString(),
+      // The pipeline stage slug lives on currentStage after the model refactor.
+      stage: contact.currentStage?.stageSlug,
+      // followupAssignedTo / followupAssignedUserId were removed from Contact;
+      // follow-up assignment now lives on the Task model, not the contact row.
+      // TODO(followup): populate from open tasks if needed.
+      followupAssignedTo: null,
+      followupAssignedUserId: null,
       missingFields: contact.missingFields,
     );
   }

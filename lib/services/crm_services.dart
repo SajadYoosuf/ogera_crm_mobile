@@ -174,17 +174,20 @@ class ContactsService {
     return ContactTypeCounts.fromJson(asMap(data));
   }
 
-  Future<List<ContactPin>> mapPins({ContactType? type}) async {
+  // TODO(map): ContactPin model not yet defined; mapPins returns raw JSON for now.
+  // Replace List<Map<String,dynamic>> with a proper ContactPin model when the
+  // map feature is built.
+  Future<List<Map<String, dynamic>>> mapPins({ContactKind? type}) async {
     final data = await _api.get(
       '/contacts/map',
       query: {
         'contact_type': 'consumer',
-        'awareness_mode': type?.awarenessMode,
+        if (type != null) 'contact_kind': type.id,
       },
     );
-    return asList(
-      asMap(data)['items'],
-    ).map(ContactPin.fromJson).whereType<ContactPin>().toList(growable: false);
+    return asList(asMap(data)['items'])
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
   }
 
   Future<Contact> detail(int id) async {

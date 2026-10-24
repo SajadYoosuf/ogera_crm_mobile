@@ -20,11 +20,11 @@ import '../view_models/session_view_model.dart';
 import '../view_models/tasks_view_model.dart';
 import 'contacts/contact_form_screen.dart';
 import 'contacts/contacts_tab.dart';
+import 'professionals/professional_form_screen.dart';
 import 'home/home_tab.dart';
 import 'home/quick_action_sheets.dart';
 import 'more/more_tab.dart';
 import 'pipeline/pipeline_tab.dart';
-import 'professionals/professional_form_screen.dart';
 import 'tasks/tasks_tab.dart';
 import 'shell_scope.dart';
 
@@ -473,66 +473,67 @@ class _FanButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: !enabled,
-      child: AnimatedBuilder(
-        animation: animation,
-        builder: (context, child) {
-          // Closed: build nothing, so the hidden labels are not announced.
-          if (animation.value == 0) return const SizedBox.shrink();
-          // Ease the progress so the circles decelerate into place.
-          final t = Curves.easeOutCubic.transform(animation.value);
-          // The translate is outside the opacity, so taps follow the circle
-          // as it moves.
-          return Transform.translate(
-            offset: offset * t,
-            child: Opacity(opacity: t, child: child),
-          );
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The label is tappable too. Without this, a tap on the text
-            // reaches the dim backdrop, which closes the fan instead.
-            GestureDetector(
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        // Closed: build nothing, so the hidden labels are not announced.
+        if (animation.value == 0) return const SizedBox.shrink();
+        // Ease the progress so the circles decelerate into place.
+        final t = Curves.easeOutCubic.transform(animation.value);
+        // The translate must be the outermost widget. A plain box takes
+        // taps only inside its own untranslated size, so anything inside
+        // the translate would miss a circle that has moved.
+        return Transform.translate(
+          offset: offset * t,
+          child: Opacity(
+            opacity: t,
+            child: IgnorePointer(ignoring: !enabled, child: child),
+          ),
+        );
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The label is tappable too. Without this, a tap on the text
+          // reaches the dim backdrop, which closes the fan instead.
+          GestureDetector(
+            onTap: action.onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: OgeraColors.ink,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                action.label,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Material(
+            color: OgeraColors.surface,
+            elevation: 3,
+            shape: const CircleBorder(
+              side: BorderSide(color: OgeraColors.line),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
               onTap: action.onTap,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: OgeraColors.ink,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  action.label,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              customBorder: const CircleBorder(),
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(action.icon, size: 22, color: OgeraColors.blue),
               ),
             ),
-            const SizedBox(height: 4),
-            Material(
-              color: OgeraColors.surface,
-              elevation: 3,
-              shape: const CircleBorder(
-                side: BorderSide(color: OgeraColors.line),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: action.onTap,
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(action.icon, size: 22, color: OgeraColors.blue),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

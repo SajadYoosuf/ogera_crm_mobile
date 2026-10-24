@@ -186,8 +186,8 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
                 title: contact.displayName,
                 subtitle: [
                   contact.phone,
-                  if ((contact.panchayath ?? '').isNotEmpty)
-                    contact.panchayath!,
+                  // panchayath was removed from Contact; show district instead.
+                  if ((contact.district ?? '').isNotEmpty) contact.district!,
                 ].join(' · '),
                 icon: Icons.person_rounded,
                 onTap: () =>
