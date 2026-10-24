@@ -131,6 +131,30 @@ class ContactsService {
   Future<Map<String, String>> houseStages() =>
       _options.options('house_stage', fallback: CrmOptions.defaultHouseStages);
 
+  /// Active lead sources from the server, as {slug: name}. Only the sources the
+  /// admin has switched on appear here, so a filter never offers a dead option.
+  /// Falls back to the built-in list when the request fails, so the picker is
+  /// never empty.
+  Future<Map<String, String>> leadSourceOptions() async {
+    try {
+      final rows = asList(await _api.get('/lead-sources'));
+      final loaded = <String, String>{
+        for (final row in rows)
+          if (asText(row['slug']) != null)
+            asText(row['slug'])!:
+                asText(row['name']) ??
+                CrmOptions.sourceLabel(asText(row['slug'])!),
+      };
+      if (loaded.isNotEmpty) return loaded;
+    } on Exception {
+      // Fall through to the built-in list below.
+    }
+    return {
+      for (final slug in CrmOptions.contactSources)
+        slug: CrmOptions.sourceLabel(slug),
+    };
+  }
+
   /// One page of contacts for the Contacts tab and other list screens.
   ///
   /// [kind] picks one type. It is a default parameter, so leaving it out gives
