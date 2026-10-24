@@ -21,10 +21,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/reference/crm_options.dart';
+import '../../core/utils/country_codes.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/utils/phone_numbers.dart';
 import '../../core/widgets/form_fields.dart';
 import '../../core/widgets/ogera_widgets.dart';
+import '../../core/widgets/phone_number_field.dart';
 import '../../models/contact.dart';
 import '../../models/product.dart';
 import '../../services/crm_services.dart';
@@ -79,6 +80,10 @@ class _AddContactSheetState extends State<AddContactSheet> {
   final _tankCapController = TextEditingController();
   final _tankAgeController = TextEditingController();
 
+  /// The selected dial code. Starts on India. Null only when editing a stored
+  /// number from a country we do not list, until the user picks a code.
+  DialCountry? _dialCountry = defaultDialCountry;
+
   ContactKind _type = ContactKind.consumer;
   String? _district;
   String? _latitude;
@@ -131,7 +136,11 @@ class _AddContactSheetState extends State<AddContactSheet> {
   void _prefill(Contact contact) {
     _type = contact.contactType;
     _nameController.text = contact.name ?? '';
-    _phoneController.text = contact.phone;
+    // A saved number such as +971501234567 is split into its country and the
+    // national digits, so the country button and the number box both fill in.
+    final split = splitStoredPhone(contact.phone);
+    _dialCountry = split.country;
+    _phoneController.text = split.national;
     _addressController.text = contact.address ?? '';
     _notesController.text = contact.notes ?? '';
     _district = contact.district;
@@ -246,6 +255,9 @@ class _AddContactSheetState extends State<AddContactSheet> {
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    // The validator already rejects a missing country; this check narrows the type.
+    final country = _dialCountry;
+    if (country == null) return;
 
     setState(() {
       _isSaving = true;
@@ -257,7 +269,8 @@ class _AddContactSheetState extends State<AddContactSheet> {
       name: _nameController.text.trim().isEmpty
           ? null
           : _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
+      // Full international form, e.g. +971501234567. The backend stores it as sent.
+      phone: toE164(country, _phoneController.text.trim()),
       district: _district,
       address: _addressController.text.trim().isEmpty
           ? null
@@ -425,23 +438,12 @@ class _AddContactSheetState extends State<AddContactSheet> {
           maxLength: 150,
           textCapitalization: TextCapitalization.words,
         ),
-        OgeraTextField(
-          label: 'Mobile number',
+        // Country code is picked from a list; the box takes national digits only.
+        // Its validator checks the length and leading digits for that country.
+        PhoneNumberField(
           controller: _phoneController,
-          icon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-          required: true,
-          maxLength: 20,
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
-          ],
-          validator: (v) {
-            // The same parser the dialer and WhatsApp use, so a number that
-            // passes here will call and message correctly.
-            final trimmed = (v ?? '').trim();
-            if (trimmed.isEmpty) return 'Mobile number is required';
-            return validateContactPhone(trimmed);
-          },
+          country: _dialCountry,
+          onCountryChanged: (country) => setState(() => _dialCountry = country),
           textInputAction: TextInputAction.next,
         ),
       ],
