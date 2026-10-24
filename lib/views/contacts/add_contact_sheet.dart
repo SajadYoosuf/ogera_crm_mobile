@@ -182,9 +182,10 @@ class _AddContactSheetState extends State<AddContactSheet> {
         contacts.houseStages(),
         _productsOrEmpty(products),
         catalog.options(
-          'profession_type',
+          'professional_type',
           fallback: const {
             'plumber': 'Plumber',
+            'engineer': 'Engineer',
             'electrician': 'Electrician',
             'interior_designer': 'Interior Designer',
             'architect': 'Architect',
