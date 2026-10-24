@@ -67,10 +67,56 @@ class _Greeting extends StatelessWidget {
               ],
             ),
           ),
-          StatusChip(
+          _RoleBadge(
             label: user.role.label,
-            tone: user.isHead ? StatusTone.brand : StatusTone.info,
             icon: user.isHead ? Icons.insights_rounded : Icons.badge_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The role pill next to the greeting: a green gradient with a soft shadow,
+/// so the role reads as a badge rather than a plain tag.
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [OgeraColors.forest, OgeraColors.forestInteractive],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: OgeraColors.forest.withValues(alpha: 0.28),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: OgeraColors.forestAccent),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
           ),
         ],
       ),
@@ -120,10 +166,7 @@ class _StaffHome extends StatelessWidget {
             const RecentLeadsSection(),
             const SizedBox(height: 24),
             // Tasks section — tasks due in the chosen period
-            const SectionHeader(
-              title: 'Tasks',
-              icon: Icons.task_alt_rounded,
-            ),
+            const SectionHeader(title: 'Tasks', icon: Icons.task_alt_rounded),
             const RecentTasksSection(),
           ],
         ),
@@ -131,4 +174,3 @@ class _StaffHome extends StatelessWidget {
     );
   }
 }
-

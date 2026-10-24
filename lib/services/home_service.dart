@@ -15,6 +15,7 @@ import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
 import '../models/attendance.dart';
 import '../models/followup.dart';
+import '../models/staff_last_location.dart';
 import 'tasks_service.dart';
 
 /// Holds the numeric KPIs the home screen shows.
@@ -64,7 +65,9 @@ class HomeService {
   /// Fetches dashboard KPIs for one time range.
   /// [range] is 'today', '7d', or 'month'.
   Future<DashboardKpis> summary(String range) async {
-    final data = asMap(await _api.get('/dashboard/summary', query: {'range': range}));
+    final data = asMap(
+      await _api.get('/dashboard/summary', query: {'range': range}),
+    );
     return DashboardKpis.fromJson(data);
   }
 
@@ -78,10 +81,10 @@ class HomeService {
   /// Starts a field session. [lat] and [lng] are optional GPS coordinates.
   Future<AttendanceRecord> checkin({double? lat, double? lng}) async {
     final data = asMap(
-      await _api.post('/attendance/checkin', body: {
-        if (lat != null) 'latitude': lat,
-        if (lng != null) 'longitude': lng,
-      }),
+      await _api.post(
+        '/attendance/checkin',
+        body: {'latitude': ?lat, 'longitude': ?lng},
+      ),
     );
     return AttendanceRecord.fromJson(data);
   }
@@ -92,9 +95,21 @@ class HomeService {
     return AttendanceRecord.fromJson(data);
   }
 
+  /// Returns the signed-in employee's last stored GPS position, or null when
+  /// no ping has reached the server yet. The server only ever returns the
+  /// caller's own row.
+  Future<StaffLastLocation?> getLastLocation() async {
+    final data = await _api.get('/staff/location/me');
+    if (data == null) return null;
+    return StaffLastLocation.fromJson(asMap(data));
+  }
+
   /// Sends a single GPS ping to the server (background streaming).
   Future<void> sendLocationPing(double lat, double lng) async {
-    await _api.post('/staff/location', body: {'latitude': lat, 'longitude': lng});
+    await _api.post(
+      '/staff/location',
+      body: {'latitude': lat, 'longitude': lng},
+    );
   }
 
   /// Returns the 10 most recently added consumer contacts created on or after
@@ -104,12 +119,15 @@ class HomeService {
   /// can reuse the same lead card widgets as the follow-ups tab.
   Future<List<Lead>> fetchRecentLeads({required String startDate}) async {
     final data = asMap(
-      await _api.get('/contacts', query: {
-        'contact_type': 'consumer',
-        'created_from': startDate,
-        'limit': '10',
-        'skip': '0',
-      }),
+      await _api.get(
+        '/contacts',
+        query: {
+          'contact_type': 'consumer',
+          'created_from': startDate,
+          'limit': '10',
+          'skip': '0',
+        },
+      ),
     );
     final items = data['items'];
     if (items is! List) return [];
@@ -127,13 +145,20 @@ class HomeService {
     required String dateFrom,
     required String dateTo,
   }) async {
+    // Same rule as the Tasks tab: only the tasks assigned to the signed-in employee.
+    final owner = _api.currentUserId;
+    if (owner == null) return [];
     final data = asMap(
-      await _api.get('/tasks', query: {
-        'date_from': dateFrom,
-        'date_to': dateTo,
-        'limit': '10',
-        'skip': '0',
-      }),
+      await _api.get(
+        '/tasks',
+        query: {
+          'date_from': dateFrom,
+          'date_to': dateTo,
+          'assigned_to': owner,
+          'limit': '10',
+          'skip': '0',
+        },
+      ),
     );
     final items = data['items'];
     if (items is! List) return [];

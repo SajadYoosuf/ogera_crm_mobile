@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase config contains project keys; keep it local
+android/app/google-services.json
+
+# Secrets: real Firebase keys (copy .env.example to .env locally)
+.env

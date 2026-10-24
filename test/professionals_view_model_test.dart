@@ -204,7 +204,6 @@ Professional _professional({
 class _FakeProfessionalsService extends ProfessionalsService {
   _FakeProfessionalsService({
     List<Professional> professionals = const [],
-    this.error,
     this.saveError,
   }) : _professionals = professionals,
        super(_UnusedApiClient());

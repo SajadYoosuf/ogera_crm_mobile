@@ -105,9 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
     context.read<ForgotPasswordViewModel>().reset();
     Navigator.push(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => const ForgotPasswordScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const ForgotPasswordScreen()),
     );
   }
 
@@ -136,7 +134,11 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Text(
           body,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: OgeraColors.muted, height: 1.5, fontSize: 14.5),
+          style: const TextStyle(
+            color: OgeraColors.muted,
+            height: 1.5,
+            fontSize: 14.5,
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
@@ -193,8 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onForgotPassword: _showForgotPasswordPage,
                     onWhatsApp: () => Launchers.whatsapp(
                       context,
-                      '9847012345',
-                      countryCode: '+91',
+                      '+919847012345',
                       message: 'Hi, I need help signing in to Ogera CRM.',
                     ),
                     bottomPad: bottomPad + keyboardInset,
@@ -336,7 +337,6 @@ class _Body extends StatelessWidget {
                   letterSpacing: -0.2,
                 ),
               ),
-              
             ],
           ),
           const SizedBox(height: 22),
@@ -515,7 +515,6 @@ class _FieldLabel extends StatelessWidget {
     );
   }
 }
-
 
 /// A gray footer line with a bold, underlined, tappable portion.
 ///

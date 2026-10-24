@@ -35,7 +35,11 @@ void main() {
     await _pumpHome(tester, api: api, user: headUser);
 
     expect(find.text('Manager'), findsOneWidget);
-    expect(find.text('Not checked in'), findsOneWidget);
+    expect(find.text('Not started'), findsOneWidget);
+    expect(
+      find.text('You haven’t started your field work today'),
+      findsOneWidget,
+    );
     expect(find.text('Check in'), findsOneWidget);
     expect(find.text('New leads'), findsOneWidget);
     expect(find.text('Open follow-ups'), findsOneWidget);
@@ -108,7 +112,10 @@ ApiClient _api({
       },
     },
     '/attendance/today': (_) => null,
-    '/notifications': (_) => {'items': <Map<String, dynamic>>[], 'unread_count': 0},
+    '/notifications': (_) => {
+      'items': <Map<String, dynamic>>[],
+      'unread_count': 0,
+    },
   });
 }
 
@@ -137,7 +144,9 @@ Future<void> _pumpHome(
         ChangeNotifierProvider<SessionViewModel>.value(value: session),
         ChangeNotifierProvider<FollowupsViewModel>.value(value: followups),
         ChangeNotifierProvider<HomeViewModel>.value(value: home),
-        ChangeNotifierProvider<NotificationViewModel>.value(value: notifications),
+        ChangeNotifierProvider<NotificationViewModel>.value(
+          value: notifications,
+        ),
       ],
       child: MaterialApp(theme: AppTheme.build(), home: const HomeTab()),
     ),

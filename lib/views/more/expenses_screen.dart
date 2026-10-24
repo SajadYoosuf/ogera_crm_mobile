@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/widgets/ogera_widgets.dart';
+import '../../core/network/api_client.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/expense.dart';
 import '../../theme/ogera_colors.dart';
@@ -83,6 +84,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 if (vm.error != null) {
                   return ErrorStateView(
                     message: vm.error!,
+                    kind: vm.errorKind ?? FailureKind.server,
                     onRetry: vm.load,
                   );
                 }
@@ -105,8 +107,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         expense: expense,
                         isHead: isHead,
                         onTap: () => showExpenseDetailSheet(ctx, expense),
-                        onDelete: expense.status == ExpenseStatus.pending &&
-                                !isHead
+                        onDelete:
+                            expense.status == ExpenseStatus.pending && !isHead
                             ? () => _confirmDelete(ctx, vm, expense)
                             : null,
                       );

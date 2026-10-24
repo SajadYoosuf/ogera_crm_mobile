@@ -2,23 +2,30 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'formatters.dart';
+import 'phone_numbers.dart';
 
 /// Call / WhatsApp / directions are offered from every contact and professional
 /// row, so the failure handling lives here once.
+///
+/// Both call and WhatsApp use [parseContactPhone], so they always dial the same
+/// international number. If a stored number cannot be parsed, nothing is opened
+/// and the user sees a message, instead of dialling a wrong number.
 class Launchers {
   const Launchers._();
 
-  static Future<void> call(
-    BuildContext context,
-    String phone, {
-    String? countryCode,
-  }) async {
-    final number = normalisePhone(phone, countryCode: countryCode);
-    _log('call', phone, countryCode, number);
+  static const invalidPhoneMessage =
+      'This number is incomplete or invalid. Edit the contact to fix it.';
+
+  static Future<void> call(BuildContext context, String phone) async {
+    final parsed = parseContactPhone(phone);
+    _log('call', phone, parsed);
+    if (parsed == null) {
+      _toast(context, invalidPhoneMessage);
+      return;
+    }
     await _open(
       context,
-      Uri(scheme: 'tel', path: number),
+      Uri(scheme: 'tel', path: parsed.e164),
       failure: 'No dialler is available on this device.',
     );
   }
@@ -26,17 +33,17 @@ class Launchers {
   static Future<void> whatsapp(
     BuildContext context,
     String phone, {
-    String? countryCode,
     String? message,
   }) async {
-    final number = normalisePhone(
-      phone,
-      countryCode: countryCode,
-    ).replaceAll('+', '');
-    final uri = Uri.https('wa.me', '/$number', {
+    final parsed = parseContactPhone(phone);
+    _log('whatsapp', phone, parsed);
+    if (parsed == null) {
+      _toast(context, invalidPhoneMessage);
+      return;
+    }
+    final uri = Uri.https('wa.me', '/${parsed.whatsAppDigits}', {
       if (message != null && message.isNotEmpty) 'text': message,
     });
-    _log('whatsapp', phone, countryCode, number);
     await _open(
       context,
       uri,
@@ -97,18 +104,13 @@ class Launchers {
     }
   }
 
-  /// Shows exactly how a number was assembled, so a wrong country code is
-  /// visible at a glance: what is stored, what code came with it, what is dialled.
-  static void _log(
-    String action,
-    String stored,
-    String? countryCode,
-    String dialled,
-  ) {
+  /// Debug-only: shows the stored number and the number that will be dialled,
+  /// so a wrong country code is visible in the console at a glance.
+  static void _log(String action, String stored, ContactPhone? parsed) {
     if (!kDebugMode) return;
     debugPrint(
-      '[Ogera Launch] $action | stored phone="$stored" '
-      'countryCode="${countryCode ?? '(none)'}" -> number=$dialled',
+      '[Ogera Launch] $action | stored="$stored" '
+      '-> ${parsed?.e164 ?? 'REJECTED'} (${parsed?.countryName ?? 'n/a'})',
     );
   }
 

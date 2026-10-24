@@ -18,7 +18,7 @@ import '../view_models/pipeline_view_model.dart';
 import '../view_models/professionals_view_model.dart';
 import '../view_models/session_view_model.dart';
 import '../view_models/tasks_view_model.dart';
-import 'contacts/contact_form_screen.dart';
+import 'contacts/add_contact_sheet.dart';
 import 'contacts/contacts_tab.dart';
 import 'professionals/professional_form_screen.dart';
 import 'home/home_tab.dart';
@@ -126,7 +126,7 @@ class _ShellScreenState extends State<ShellScreen>
             _FabAction(
               label: 'Add contact',
               icon: Icons.person_add_alt_1_rounded,
-              onTap: () => _runFabAction(() => openContactForm(context)),
+              onTap: () => _runFabAction(() => showAddContactSheet(context)),
             ),
             _FabAction(
               label: 'Activity log',
@@ -542,15 +542,6 @@ class _FanButton extends StatelessWidget {
 /// Shared entry points for the Add contact and Add professional forms.
 /// Each pushes through [pushShellRoute] so the form can write back into the
 /// list it was opened from.
-Future<void> openContactForm(BuildContext context) async {
-  final contacts = context.read<ContactsViewModel>();
-  final created = await pushShellRoute<dynamic>(
-    context,
-    (_) => const ContactFormScreen(),
-  );
-  if (created != null) contacts.refresh();
-}
-
 Future<void> openProfessionalForm(BuildContext context) async {
   final professionals = context.read<ProfessionalsViewModel>();
   final created = await pushShellRoute<dynamic>(

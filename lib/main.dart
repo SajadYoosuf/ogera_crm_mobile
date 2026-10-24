@@ -19,10 +19,13 @@ import 'view_models/login_view_model.dart';
 import 'view_models/session_view_model.dart';
 import 'views/root_router.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load the .env file (Firebase keys) BEFORE Firebase reads them.
+  await dotenv.load(fileName: '.env');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   LocationStreamingService.init();
   SystemChrome.setSystemUIOverlayStyle(

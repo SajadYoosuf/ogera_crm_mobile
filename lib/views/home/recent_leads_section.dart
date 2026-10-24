@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/followup.dart';
@@ -69,7 +70,10 @@ class RecentLeadsSection extends StatelessWidget {
 
     if (home.recentLeadsError != null) {
       return ErrorStateView(
-        message: 'Could not load recent leads.',
+        message: home.recentLeadsErrorKind == FailureKind.offline
+            ? 'Check your internet connection, then try again.'
+            : 'We could not load recent leads. Please try again.',
+        kind: home.recentLeadsErrorKind ?? FailureKind.server,
         onRetry: () => home.setRecentLeadsRange(home.recentLeadsRange),
       );
     }
@@ -167,10 +171,7 @@ class _LeadRow extends StatelessWidget {
                       dense: true,
                     ),
                     if (lead.district != null)
-                      StatusChip(
-                        label: lead.district!,
-                        dense: true,
-                      ),
+                      StatusChip(label: lead.district!, dense: true),
                     if (lead.followupAssignedTo != null)
                       StatusChip(
                         label: lead.followupAssignedTo!,

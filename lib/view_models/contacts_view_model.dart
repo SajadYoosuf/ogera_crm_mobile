@@ -28,8 +28,8 @@ class ContactsViewModel extends ChangeNotifier {
   bool _isLoadingMore = false;
   String? _error;
   String _query = '';
-  // null means the "All Contacts" tab; otherwise one of consumer/partner/dealer.
-  ContactKind? _kind;
+  // The Contacts screen has one tab per type, and Consumer is the first tab.
+  ContactKind? _kind = ContactKind.consumer;
   String? _source;
   String? _startDate;
   String? _endDate;

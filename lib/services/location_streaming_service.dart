@@ -79,7 +79,8 @@ class LocationStreamingService {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: _kChannelId,
         channelName: _kChannelName,
-        channelDescription: 'Sends your GPS position while you are on field duty.',
+        channelDescription:
+            'Sends your GPS position while you are on field duty.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
       ),
@@ -102,16 +103,39 @@ class LocationStreamingService {
     _lastPosted = null;
 
     // Start the Android foreground service so the OS doesn't suspend the app.
-    await FlutterForegroundTask.startService(
-      serviceId: _kServiceId,
-      notificationTitle: 'On field duty',
-      notificationText: 'Location tracking is active',
-      callback: _startCallback,
-    );
+    // If the OS refuses it, tracking still runs while the app is open, so a
+    // failure here must not leave `_running` stuck at true.
+    try {
+      await FlutterForegroundTask.startService(
+        serviceId: _kServiceId,
+        notificationTitle: 'On field duty',
+        notificationText: 'Location tracking is active',
+        callback: _startCallback,
+      );
+    } catch (_) {
+      // Keep going without the notification.
+    }
 
     // Fire immediately, then every 30 s.
     await _tick();
     _timer = Timer.periodic(_kInterval, (_) => _tick());
+  }
+
+  /// Reads the phone's GPS position once, for the check-in record.
+  ///
+  /// Returns null when permission is off or no fix arrives in time. Check-in
+  /// still goes through without coordinates, so this never throws.
+  Future<Position?> currentPosition() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Stops the timer and dismisses the foreground notification.
@@ -136,7 +160,8 @@ class LocationStreamingService {
       );
 
       final last = _lastPosted;
-      final moved = last == null ||
+      final moved =
+          last == null ||
           Geolocator.distanceBetween(
                 last.latitude,
                 last.longitude,

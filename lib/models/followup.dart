@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/utils/formatters.dart';
 import '../theme/ogera_colors.dart';
 import 'contact.dart';
+import 'lead_work.dart';
 
 /// A lead on the follow-up board. It is a `contacts` row with a stage, which is
 /// why it carries the qualification fields the pipeline gates on.
@@ -222,6 +223,7 @@ class Remark {
     required this.isSystem,
     required this.createdAt,
     this.staffName,
+    this.isFollowup = false,
   });
 
   final int id;
@@ -230,6 +232,10 @@ class Remark {
   final bool isSystem;
   final DateTime createdAt;
   final String? staffName;
+
+  /// True for a scheduled follow-up row (an activity with a due date), so the
+  /// contact screen can list follow-ups apart from the activity log.
+  final bool isFollowup;
 
   String get author =>
       (staffName ?? '').trim().isEmpty ? 'System' : staffName!.trim();
@@ -245,56 +251,33 @@ class Remark {
     );
   }
 
-  static const _typeLabels = <String, String>{
-    'phone_call': 'Call',
-    'field_visit': 'Field visit',
-    'whatsapp': 'WhatsApp',
-    'quote': 'Quote',
-    'demo': 'Demo',
-    'internal_note': 'Note',
-  };
-
-  /// One row of `GET /contacts/{id}/activities`: a logged note or a follow-up.
-  factory Remark.fromActivity(Map<String, dynamic> json) {
-    final type = _typeLabels[asText(json['type'])] ?? 'Activity';
-    final notes = asText(json['notes']);
-    final scheduled = asText(json['scheduled_date']);
-    final status = asText(json['status']);
-
-    String text;
-    if (scheduled != null && status == 'pending') {
-      text =
-          '$type follow-up due $scheduled${notes == null ? '' : ' · $notes'}';
-    } else if (scheduled != null) {
-      text = '$type follow-up done${notes == null ? '' : ' · $notes'}';
-    } else if (type == 'Note') {
-      text = notes ?? '';
-    } else {
-      text = '$type${notes == null ? '' : ' · $notes'}';
-    }
+  /// One row of `GET /contacts/{id}/history`, read through [LeadHistoryEntry].
+  ///
+  /// - A logged activity is a note the employee wrote, so its text is the notes.
+  /// - A follow-up (scheduled or rescheduled) is a follow-up line with its due day.
+  /// - Stage moves, owner changes and field edits are system lines.
+  ///
+  /// [id] is the row's position in the list. History rows have no shared id.
+  factory Remark.fromHistory(LeadHistoryEntry entry, int id) {
+    final isNote = entry.eventType == 'activity';
+    final isFollowup =
+        entry.eventType == 'followup' ||
+        entry.eventType == 'followup_rescheduled';
+    final due = entry.dueAt;
+    final text = isNote
+        ? (entry.notes ?? entry.summary)
+        : [
+            entry.summary,
+            if (due != null) 'due ${formatDayMonth(due)}',
+          ].join(' · ');
     return Remark(
-      id: asInt(json['id']) ?? 0,
-      staffId: asText(json['created_by']) ?? '',
+      id: id,
+      staffId: entry.actorId?.toString() ?? '',
       remark: text,
-      isSystem: scheduled != null,
-      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
-      staffName: asText(json['created_by_name']),
-    );
-  }
-
-  /// One row of `GET /contacts/{id}/stages`, shown as a system line.
-  factory Remark.fromStageChange(Map<String, dynamic> json) {
-    final stage = humanizeSlug(asText(json['stage']) ?? '');
-    final reason = asText(json['loss_reason']);
-    return Remark(
-      // Offset so a stage row never collides with an activity row's id.
-      id: -(asInt(json['id']) ?? 0),
-      staffId: asText(json['changed_by']) ?? '',
-      remark: reason == null
-          ? 'Stage changed to $stage'
-          : 'Stage changed to $stage (${humanizeSlug(reason)})',
-      isSystem: true,
-      createdAt: parseDate(json['changed_at']) ?? DateTime.now(),
+      isSystem: !isNote,
+      createdAt: entry.timestamp,
+      staffName: entry.actorName,
+      isFollowup: isFollowup,
     );
   }
 }

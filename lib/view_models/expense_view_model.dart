@@ -15,6 +15,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../models/expense.dart';
+import '../core/network/api_client.dart';
 import '../services/expense_service.dart';
 
 class ExpenseViewModel extends ChangeNotifier {
@@ -25,6 +26,7 @@ class ExpenseViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool _isMutating = false;
   String? _error;
+  FailureKind? _errorKind;
 
   final List<Expense> _expenses = [];
   ExpenseStatus? _statusFilter;
@@ -33,19 +35,23 @@ class ExpenseViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isMutating => _isMutating;
   String? get error => _error;
+  FailureKind? get errorKind => _errorKind;
   ExpenseStatus? get statusFilter => _statusFilter;
 
   /// Loads the expense list from the server.
   Future<void> load() async {
     _isLoading = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
     try {
       _expenses
         ..clear()
         ..addAll(await _service.list(status: _statusFilter));
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -62,13 +68,16 @@ class ExpenseViewModel extends ChangeNotifier {
   Future<bool> create(ExpenseDraft draft) async {
     _isMutating = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
     try {
       final expense = await _service.create(draft);
       _expenses.insert(0, expense);
       return true;
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
       return false;
     } finally {
       _isMutating = false;
@@ -80,13 +89,16 @@ class ExpenseViewModel extends ChangeNotifier {
   Future<bool> delete(int id) async {
     _isMutating = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
     try {
       await _service.delete(id);
       _expenses.removeWhere((e) => e.id == id);
       return true;
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
       return false;
     } finally {
       _isMutating = false;
@@ -118,6 +130,7 @@ class ExpenseViewModel extends ChangeNotifier {
   Future<bool> _review(Future<Expense> Function() action) async {
     _isMutating = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
     try {
       final updated = await action();
@@ -127,7 +140,9 @@ class ExpenseViewModel extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
       return false;
     } finally {
       _isMutating = false;

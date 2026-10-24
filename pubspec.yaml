@@ -52,6 +52,7 @@ dependencies:
   permission_handler: ^11.3.1
   image_picker: ^1.1.2
   flutter_foreground_task: ^8.14.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -100,6 +101,8 @@ flutter:
     - assets/images/ogera-symbol.png
     - assets/images/ogera-symbol-foreground.png
     - assets/images/ogera-logo.png
+    # Firebase keys, read at startup by flutter_dotenv (see lib/main.dart).
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

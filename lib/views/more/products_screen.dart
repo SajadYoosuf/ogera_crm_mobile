@@ -26,6 +26,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   late final ApiClient _api;
   bool _loading = false;
   String? _error;
+  FailureKind? _errorKind;
   List<_Product> _products = [];
   final _searchController = TextEditingController();
   String _query = '';
@@ -50,6 +51,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorKind = null;
     });
     try {
       final data = asMap(
@@ -57,7 +59,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
       );
       _products = asList(data['items']).map(_Product.fromJson).toList();
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
     } finally {
       setState(() => _loading = false);
     }
@@ -95,7 +99,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
               builder: (_) {
                 if (_loading) return const LoadingListView(itemHeight: 72);
                 if (_error != null) {
-                  return ErrorStateView(message: _error!, onRetry: _load);
+                  return ErrorStateView(
+                    message: _error!,
+                    kind: _errorKind ?? FailureKind.server,
+                    onRetry: _load,
+                  );
                 }
                 if (_filtered.isEmpty) {
                   return const EmptyStateView(
@@ -108,7 +116,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   itemCount: _filtered.length,
                   separatorBuilder: (context, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) => _ProductCard(product: _filtered[i]),
+                  itemBuilder: (context, i) =>
+                      _ProductCard(product: _filtered[i]),
                 );
               },
             ),
@@ -148,8 +157,7 @@ class _ProductCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 6,
             children: [
-              if (product.sku != null)
-                _Tag(label: 'SKU: ${product.sku}'),
+              if (product.sku != null) _Tag(label: 'SKU: ${product.sku}'),
               if (product.modelNumber != null)
                 _Tag(label: product.modelNumber!),
               if (product.mrp != null)

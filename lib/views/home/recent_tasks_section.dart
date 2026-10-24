@@ -3,8 +3,9 @@
 /// WHAT IT DOES:
 ///   Shows up to 10 tasks due in the selected period (Today / This Week /
 ///   This Month). Each card shows the task title, due time, linked contact,
-///   and priority badge. Tapping opens the existing [TaskStatusSheet] so the
-///   user can mark it done or update its status without leaving the home tab.
+///   and priority badge. Tapping opens the same task detail sheet as the Tasks
+///   tab ([openTaskDetail]), so the user can change status or complete the task
+///   without leaving the home tab.
 ///
 /// STATE:
 ///   Reads [HomeViewModel.homeTasks], [HomeViewModel.homeTasksRange], and
@@ -19,12 +20,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
+import '../../core/network/api_client.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../services/tasks_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/home_view_model.dart';
-import '../tasks/task_status_sheet.dart';
+import '../tasks/task_detail_sheet.dart';
 
 class RecentTasksSection extends StatelessWidget {
   const RecentTasksSection({super.key});
@@ -64,7 +66,10 @@ class RecentTasksSection extends StatelessWidget {
 
     if (home.homeTasksError != null) {
       return ErrorStateView(
-        message: 'Could not load tasks.',
+        message: home.homeTasksErrorKind == FailureKind.offline
+            ? 'Check your internet connection, then try again.'
+            : 'We could not load your tasks. Please try again.',
+        kind: home.homeTasksErrorKind ?? FailureKind.server,
         onRetry: () => home.setHomeTasksRange(home.homeTasksRange),
       );
     }
@@ -89,7 +94,7 @@ class RecentTasksSection extends StatelessWidget {
 /// One task card in the home list.
 ///
 /// Shows: title, due time, contact name, and a priority + state badge.
-/// Tapping opens [TaskStatusSheet] which can mark the task done.
+/// Tapping opens the task detail sheet. Afterwards the home list reloads.
 class _TaskRow extends StatelessWidget {
   const _TaskRow({required this.task});
 
@@ -103,7 +108,12 @@ class _TaskRow extends StatelessWidget {
     return OgeraCard(
       accent: stateColor,
       padding: const EdgeInsets.fromLTRB(13, 12, 12, 12),
-      onTap: () => showTaskStatusSheet(context, task),
+      onTap: () async {
+        final action = await openTaskDetail(context, task);
+        if (action != null && context.mounted) {
+          await context.read<HomeViewModel>().refreshHomeTasks();
+        }
+      },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -244,11 +254,7 @@ class _EmptyTasks extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            Icon(
-              Icons.task_alt_rounded,
-              size: 36,
-              color: OgeraColors.muted,
-            ),
+            Icon(Icons.task_alt_rounded, size: 36, color: OgeraColors.muted),
             SizedBox(height: 8),
             Text(
               'No tasks in this period',
