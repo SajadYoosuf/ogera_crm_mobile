@@ -14,6 +14,8 @@ library;
 import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
 import '../models/attendance.dart';
+import '../models/followup.dart';
+import 'tasks_service.dart';
 
 /// Holds the numeric KPIs the home screen shows.
 class DashboardKpis {
@@ -93,5 +95,50 @@ class HomeService {
   /// Sends a single GPS ping to the server (background streaming).
   Future<void> sendLocationPing(double lat, double lng) async {
     await _api.post('/staff/location', body: {'latitude': lat, 'longitude': lng});
+  }
+
+  /// Returns the 10 most recently added consumer contacts created on or after
+  /// [startDate] (ISO date string, e.g. "2026-10-24").
+  ///
+  /// Maps the API's `/contacts` response into [Lead] objects so the home tab
+  /// can reuse the same lead card widgets as the follow-ups tab.
+  Future<List<Lead>> fetchRecentLeads({required String startDate}) async {
+    final data = asMap(
+      await _api.get('/contacts', query: {
+        'contact_type': 'consumer',
+        'created_from': startDate,
+        'limit': '10',
+        'skip': '0',
+      }),
+    );
+    final items = data['items'];
+    if (items is! List) return [];
+    return [
+      for (final item in items) Lead.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  /// Returns up to 10 tasks scheduled between [dateFrom] and [dateTo]
+  /// (both ISO date strings, e.g. "2026-10-24").
+  ///
+  /// Maps the API's `/tasks` response into [Task] objects so the home tab
+  /// can reuse the same TaskStatusSheet as the tasks tab.
+  Future<List<Task>> fetchHomeTasks({
+    required String dateFrom,
+    required String dateTo,
+  }) async {
+    final data = asMap(
+      await _api.get('/tasks', query: {
+        'date_from': dateFrom,
+        'date_to': dateTo,
+        'limit': '10',
+        'skip': '0',
+      }),
+    );
+    final items = data['items'];
+    if (items is! List) return [];
+    return [
+      for (final item in items) Task.fromJson(item as Map<String, dynamic>),
+    ];
   }
 }

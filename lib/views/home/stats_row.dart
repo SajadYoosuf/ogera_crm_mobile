@@ -62,7 +62,7 @@ class _KpiGrid extends StatelessWidget {
         label: 'New leads',
         value: kpis.newLeads,
         icon: Icons.person_add_alt_rounded,
-        color: OgeraColors.blue,
+        color: OgeraColors.forestInteractive,
       ),
       _KpiData(
         label: 'Open follow-ups',

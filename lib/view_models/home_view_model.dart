@@ -18,9 +18,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/formatters.dart';
 import '../models/attendance.dart';
+import '../models/followup.dart';
 import '../services/home_service.dart';
 import '../services/location_streaming_service.dart';
+import '../services/tasks_service.dart';
 
 /// Which time window the KPI row shows.
 enum KpiRange { today, week, month }
@@ -55,6 +58,28 @@ class HomeViewModel extends ChangeNotifier {
   final Map<KpiRange, DashboardKpis> _kpis = {};
   KpiRange _range = KpiRange.today;
 
+  // ── Recent Leads ──────────────────────────────────────────────────────────
+  List<Lead> _recentLeads = [];
+  KpiRange _recentLeadsRange = KpiRange.today;
+  bool _isRecentLeadsLoading = false;
+  String? _recentLeadsError;
+
+  List<Lead> get recentLeads => _recentLeads;
+  KpiRange get recentLeadsRange => _recentLeadsRange;
+  bool get isRecentLeadsLoading => _isRecentLeadsLoading;
+  String? get recentLeadsError => _recentLeadsError;
+
+  // ── Home Tasks ────────────────────────────────────────────────────────────
+  List<Task> _homeTasks = [];
+  KpiRange _homeTasksRange = KpiRange.today;
+  bool _isHomeTasksLoading = false;
+  String? _homeTasksError;
+
+  List<Task> get homeTasks => _homeTasks;
+  KpiRange get homeTasksRange => _homeTasksRange;
+  bool get isHomeTasksLoading => _isHomeTasksLoading;
+  String? get homeTasksError => _homeTasksError;
+
   bool get isLoading => _isLoading;
   bool get isCheckinLoading => _isCheckinLoading;
   String? get error => _error;
@@ -66,7 +91,8 @@ class HomeViewModel extends ChangeNotifier {
   /// The KPIs for the currently selected range (empty if not yet loaded).
   DashboardKpis get kpis => _kpis[_range] ?? DashboardKpis.empty();
 
-  /// Loads all three KPI ranges and today's attendance in parallel.
+  /// Loads all three KPI ranges, today's attendance, recent leads, and
+  /// today's tasks in parallel.
   Future<void> load() async {
     _isLoading = true;
     _error = null;
@@ -89,6 +115,13 @@ class HomeViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+
+    // Load recent leads and tasks independently so a KPI failure does not
+    // prevent the sections from rendering.
+    await Future.wait([
+      _loadRecentLeads(_recentLeadsRange),
+      _loadHomeTasks(_homeTasksRange),
+    ]);
   }
 
   /// Switches the visible KPI range; no network call.
@@ -96,6 +129,71 @@ class HomeViewModel extends ChangeNotifier {
     if (_range == range) return;
     _range = range;
     notifyListeners();
+  }
+
+  // ── Recent Leads ──────────────────────────────────────────────────────────
+
+  /// Switches the recent-leads time window and reloads from the server.
+  Future<void> setRecentLeadsRange(KpiRange range) async {
+    if (_recentLeadsRange == range) return;
+    _recentLeadsRange = range;
+    await _loadRecentLeads(range);
+  }
+
+  Future<void> _loadRecentLeads(KpiRange range) async {
+    _isRecentLeadsLoading = true;
+    _recentLeadsError = null;
+    notifyListeners();
+    try {
+      _recentLeads = await _service.fetchRecentLeads(
+        startDate: _rangeStartDate(range),
+      );
+    } catch (e) {
+      _recentLeadsError = e.toString();
+    } finally {
+      _isRecentLeadsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Home Tasks ────────────────────────────────────────────────────────────
+
+  /// Switches the home-tasks time window and reloads from the server.
+  Future<void> setHomeTasksRange(KpiRange range) async {
+    if (_homeTasksRange == range) return;
+    _homeTasksRange = range;
+    await _loadHomeTasks(range);
+  }
+
+  Future<void> _loadHomeTasks(KpiRange range) async {
+    _isHomeTasksLoading = true;
+    _homeTasksError = null;
+    notifyListeners();
+    try {
+      final from = _rangeStartDate(range);
+      final to = isoDate(DateTime.now());
+      _homeTasks = await _service.fetchHomeTasks(dateFrom: from, dateTo: to);
+    } catch (e) {
+      _homeTasksError = e.toString();
+    } finally {
+      _isHomeTasksLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /// Returns an ISO date string for the start of the period denoted by
+  /// [range] (today's date for Today, 7 days ago for Week, 30 days ago for
+  /// Month). The API filters with `created_from >= startDate`.
+  String _rangeStartDate(KpiRange range) {
+    final now = DateTime.now();
+    final start = switch (range) {
+      KpiRange.today => DateTime(now.year, now.month, now.day),
+      KpiRange.week => now.subtract(const Duration(days: 6)),
+      KpiRange.month => now.subtract(const Duration(days: 29)),
+    };
+    return isoDate(start);
   }
 
   /// Checks the employee in. [lat] and [lng] are optional GPS coords.

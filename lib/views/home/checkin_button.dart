@@ -23,7 +23,7 @@ class CheckinCard extends StatelessWidget {
     final record = home.attendance;
     final isOpen = home.isCheckedIn;
     final busy = home.isCheckinLoading;
-    final accent = isOpen ? OgeraColors.success : OgeraColors.blue;
+    final accent = isOpen ? OgeraColors.success : OgeraColors.forestInteractive;
 
     return OgeraCard(
       accent: accent,
