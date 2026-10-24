@@ -3,6 +3,7 @@ import '../core/reference/crm_options.dart';
 import '../core/utils/formatters.dart';
 import '../models/contact.dart';
 import '../models/followup.dart';
+import '../models/lead_work.dart';
 import '../models/professional.dart';
 
 /// One file for the record modules. They all talk to the same FastAPI server
@@ -142,6 +143,8 @@ class ContactsService {
     String? startDate,
     String? endDate,
     String? addedBy,
+    int? assignedTo,
+    int? createdBy,
     int page = 1,
     int limit = 20,
   }) async {
@@ -159,8 +162,10 @@ class ContactsService {
         'created_to': endDate,
         // The performance drill-down asks for the contacts nobody is recorded
         // as having added.
-        'created_by': addedBy == 'unattributed' ? null : addedBy,
+        'created_by':
+            createdBy ?? (addedBy == 'unattributed' ? null : addedBy),
         'unattributed': addedBy == 'unattributed' ? true : null,
+        'assigned_to': assignedTo,
         'skip': (page - 1) * limit,
         'limit': limit,
       },
@@ -185,9 +190,9 @@ class ContactsService {
         if (type != null) 'contact_kind': type.id,
       },
     );
-    return asList(asMap(data)['items'])
-        .whereType<Map<String, dynamic>>()
-        .toList(growable: false);
+    return asList(
+      asMap(data)['items'],
+    ).whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
   Future<Contact> detail(int id) async {
@@ -211,15 +216,27 @@ class ContactsService {
         : LeadSourceCatalog.normalise(draft.source!);
     return draft.toApiJson(
       leadSourceId: await _sources.idFor(slug),
-      offline: slug == 'offline',
+      // Both names are GPS sources: the backend's rule keys on `field_visit`,
+      // while older mobile code and data use `offline`.
+      offline: slug == 'offline' || slug == 'field_visit',
     );
   }
 
   Future<void> delete(int id) => _api.delete('/contacts/$id');
 
-  /// Referral picker: contacts already surfaced by the paged list endpoint.
-  Future<List<Contact>> search(String query) async {
-    final page = await list(query: query, limit: 10);
+  /// Referral picker and activity picker: contacts from the paged list endpoint.
+  /// Pass [assignedTo] or [createdBy] to limit results to one employee's contacts.
+  Future<List<Contact>> search(
+    String query, {
+    int? assignedTo,
+    int? createdBy,
+  }) async {
+    final page = await list(
+      query: query,
+      assignedTo: assignedTo,
+      createdBy: createdBy,
+      limit: 10,
+    );
     return page.contacts;
   }
 }
@@ -369,25 +386,25 @@ class FollowupsService {
 
   /// Moves the lead's open follow-up to [date], or books a call when it has
   /// none. The task belongs to the lead's owner.
+  /// Uses the follow-up endpoints: the server rejects the old activity shape.
+  /// Due time is the whole day (23:59), the same as the web app.
   Future<void> _scheduleFollowup(int id, String date, {int? owner}) async {
-    final activities = asList(await _api.get('/contacts/$id/activities'));
+    final rows = asList(await _api.get('/contacts/$id/followups'));
     final open =
-        activities
-            .where(
-              (a) =>
-                  a['status'] == 'pending' &&
-                  asText(a['scheduled_date']) != null,
-            )
+        rows
+            .map(asMap)
+            .where((f) => asText(f['status']) != 'completed')
             .toList()
           ..sort(
-            (a, b) => asText(
-              a['scheduled_date'],
-            )!.compareTo(asText(b['scheduled_date'])!),
+            (a, b) => (asText(a['due_at']) ?? '').compareTo(
+              asText(b['due_at']) ?? '',
+            ),
           );
+    final dueAt = '${date}T23:59:00';
     if (open.isNotEmpty) {
       await _api.patch(
-        '/contacts/$id/activities/${open.first['id']}',
-        body: {'scheduled_date': date},
+        '/contacts/$id/followups/${open.first['id']}',
+        body: {'due_at': dueAt},
       );
       return;
     }
@@ -396,41 +413,48 @@ class FollowupsService {
         asInt(asMap(await _api.get('/contacts/$id'))['assigned_to']) ??
         _api.currentUserId;
     await _api.post(
-      '/contacts/$id/activities',
-      body: {
-        'type': 'phone_call',
-        'scheduled_date': date,
-        'assigned_to': assignee,
-      },
+      '/contacts/$id/followups',
+      body: {'channel': 'phone_call', 'due_at': dueAt, 'assigned_to': assignee},
     );
   }
 
-  /// The lead's timeline: logged notes and follow-ups, plus every stage move
-  /// shown as a system line, newest first.
+  /// The lead's timeline, newest first, from `GET /contacts/{id}/history`.
+  ///
+  /// One request gives every event (notes, follow-ups, stage moves, owner
+  /// changes) with the fields the server actually sends. The server already
+  /// orders them newest first, so no client-side sort is needed.
   Future<List<Remark>> remarks(int leadId) async {
-    final results = await Future.wait([
-      _api.get('/contacts/$leadId/activities'),
-      _api.get('/contacts/$leadId/stages'),
-    ]);
-    final entries = [
-      ...asList(results[0]).map(Remark.fromActivity),
-      ...asList(results[1]).map(Remark.fromStageChange),
+    final rows = asList(await _api.get('/contacts/$leadId/history'));
+    return [
+      for (var i = 0; i < rows.length; i++)
+        Remark.fromHistory(LeadHistoryEntry.fromJson(asMap(rows[i])), i + 1),
     ];
-    // Both lists arrive newest first, but rows saved in the same second tie on
-    // time. Sorting by position as well keeps the server's order for ties
-    // (List.sort alone is not stable).
-    final position = {for (var i = 0; i < entries.length; i++) entries[i]: i};
-    entries.sort((a, b) {
-      final byTime = b.createdAt.compareTo(a.createdAt);
-      return byTime != 0 ? byTime : position[a]!.compareTo(position[b]!);
-    });
-    return entries;
   }
 
   Future<void> addRemark(int leadId, String remark) {
     return _api.post(
       '/contacts/$leadId/activities',
       body: {'activity_type': 'internal_note', 'notes': remark},
+    );
+  }
+
+  /// Books a new follow-up on a contact. Unlike [updateLead], which moves the
+  /// open follow-up, this always adds one, so no earlier plan is overwritten.
+  Future<void> addFollowup(
+    int contactId, {
+    required String date,
+    int? assignedTo,
+    String type = 'phone_call',
+    String? notes,
+  }) async {
+    await _api.post(
+      '/contacts/$contactId/followups',
+      body: {
+        'channel': type,
+        'due_at': '${date}T23:59:00',
+        'assigned_to': assignedTo ?? _api.currentUserId,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
     );
   }
 
