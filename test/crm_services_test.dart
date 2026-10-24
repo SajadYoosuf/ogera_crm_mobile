@@ -545,7 +545,7 @@ void main() {
 
     test('stages come back in board order', () async {
       final server = FakeServer({
-        'GET /contacts/stage-types': (_) => [
+        'GET /pipeline/stages': (_) => [
           stageJson(id: 'won', label: 'Won', orderIndex: 2),
           stageJson(id: 'new_lead', label: 'New Lead', orderIndex: 0),
           stageJson(id: 'quoted', label: 'Quoted', orderIndex: 1),

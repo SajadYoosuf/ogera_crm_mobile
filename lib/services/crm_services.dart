@@ -316,7 +316,7 @@ class FollowupsService {
   }
 
   Future<List<Stage>> stages() async {
-    final data = await _api.get('/contacts/stage-types');
+    final data = await _api.get('/pipeline/stages');
     return asList(data).map(Stage.fromJson).toList()
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
   }

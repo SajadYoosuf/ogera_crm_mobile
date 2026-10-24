@@ -94,7 +94,7 @@ ApiClient _api({
       'total': tasks.length,
       'summary': {'overdue': 0, 'today': 0, 'upcoming': 0, 'done': 0},
     },
-    '/contacts/stage-types': (_) => [
+    '/pipeline/stages': (_) => [
       stageJson(id: 'new', label: 'New', orderIndex: 0),
       stageJson(id: 'won', label: 'Won', orderIndex: 1),
     ],

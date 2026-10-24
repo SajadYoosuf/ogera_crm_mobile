@@ -169,7 +169,7 @@ enum DueBucket {
   final IconData icon;
 }
 
-/// Pipeline stages, from `GET /contacts/stage-types`. The API fixes the list;
+/// Pipeline stages, from `GET /pipeline/stages`. The API fixes the list;
 /// the app never hardcodes it.
 class Stage {
   const Stage({

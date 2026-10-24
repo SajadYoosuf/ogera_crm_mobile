@@ -23,7 +23,7 @@ Start a local backend with `uvicorn main:app --host 0.0.0.0 --port 8000` from `o
 | Professionals | `partner` contacts (`profession_type`, `work_area` is the "place"). |
 | Source | `lead_source_id`, looked up from `GET /lead-sources` by slug (`meta`, `website`, `showroom`, `gmb`, `whatsapp`, `offline`). |
 | Location on a contact | Only for the **Offline** source: required when creating one, rejected for any other source. |
-| Follow-up board | consumer contacts + their stage (`GET /contacts`), stage list (`GET /contacts/stage-types`), and the earliest open follow-up date (`GET /tasks`). |
+| Follow-up board | consumer contacts + their stage (`GET /contacts`), stage list (`GET /pipeline/stages`), and the earliest open follow-up date (`GET /tasks`). |
 | Move a stage | `POST /contacts/{id}/stages`. The server answers `409` with `missing_fields` until the lead has its details (district, address, source, house stage). Marking a lead Lost sends the reason `other`. |
 | Assign a lead | `PUT /contacts/{id}` with `assigned_to`. |
 | Due date | an open follow-up (`phone_call`) on the lead: rescheduled if one exists, booked for the lead's owner otherwise. |
