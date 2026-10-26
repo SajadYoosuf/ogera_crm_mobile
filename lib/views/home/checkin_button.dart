@@ -15,10 +15,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/ogera_widgets.dart';
+import '../../services/geocoding_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/home_view_model.dart';
 
@@ -326,10 +328,48 @@ Future<void> _showLocationDetails(BuildContext context, HomeViewModel home) asyn
   );
 }
 
-class _LocationDetailsSheet extends StatelessWidget {
+class _LocationDetailsSheet extends StatefulWidget {
   const _LocationDetailsSheet({required this.home});
 
   final HomeViewModel home;
+
+  @override
+  State<_LocationDetailsSheet> createState() => _LocationDetailsSheetState();
+}
+
+class _LocationDetailsSheetState extends State<_LocationDetailsSheet> {
+  final GeocodingService _geocoder = GeocodingService();
+  final Map<String, String> _addresses = {};
+  final Set<String> _resolving = {};
+
+  HomeViewModel get home => widget.home;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveAddresses();
+  }
+
+  Future<void> _resolveAddresses() async {
+    for (final point in home.locationHistory) {
+      final key = _keyFor(point.latitude, point.longitude);
+      if (_addresses.containsKey(key) || _resolving.contains(key)) continue;
+      _resolving.add(key);
+      final address = await _geocoder.resolve(
+        LatLng(point.latitude, point.longitude),
+      );
+      if (!mounted) return;
+      setState(() {
+        if (address != null && address.trim().isNotEmpty) {
+          _addresses[key] = firstWords(address);
+        }
+        _resolving.remove(key);
+      });
+    }
+  }
+
+  String _keyFor(double latitude, double longitude) =>
+      '${latitude.toStringAsFixed(5)},${longitude.toStringAsFixed(5)}';
 
   @override
   Widget build(BuildContext context) {
@@ -386,14 +426,19 @@ class _LocationDetailsSheet extends StatelessWidget {
       itemBuilder: (_, index) {
         final point =
             home.locationHistory[home.locationHistory.length - index - 1];
+        final key = _keyFor(point.latitude, point.longitude);
+        final address = _addresses[key];
         return ListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
           title: Text(formatMoment(point.recordedAt)),
           subtitle: Text(
-            '${point.latitude.toStringAsFixed(6)}, '
-            '${point.longitude.toStringAsFixed(6)}',
+            address ??
+                (_resolving.contains(key)
+                    ? 'Resolving address…'
+                    : '${point.latitude.toStringAsFixed(6)}, '
+                        '${point.longitude.toStringAsFixed(6)}'),
           ),
           trailing: const Text(
             'Saved',
