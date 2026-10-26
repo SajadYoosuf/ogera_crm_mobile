@@ -16,10 +16,14 @@ library;
 
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/network/api_client.dart';
 import 'home_service.dart';
+import 'location_queue.dart';
 
 /// Distance in metres the device must travel before a new ping is posted.
 const double _kThresholdMetres = 50;
@@ -60,17 +64,29 @@ class _KeepAliveHandler extends TaskHandler {
 /// Lifecycle:
 ///   [start] → called on successful check-in
 ///   [stop]  → called on checkout or sign-out
-class LocationStreamingService {
+class LocationStreamingService with WidgetsBindingObserver {
   /// Pass the same [HomeService] instance the rest of the app uses.
-  LocationStreamingService(this._homeService);
+  LocationStreamingService(this._homeService, {LocationQueue? queue})
+    : _queue = queue ?? LocationQueue();
 
   final HomeService _homeService;
+  final LocationQueue _queue;
 
   Timer? _timer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Future<void>? _activeTick;
+  Future<void>? _activeFlush;
   Position? _lastPosted;
   bool _running = false;
+  bool _isFlushing = false;
+  int _pendingCount = 0;
+  bool _isSyncing = false;
+
+  VoidCallback? onStatusChanged;
 
   bool get isRunning => _running;
+  int get pendingCount => _pendingCount;
+  bool get isSyncing => _isSyncing;
 
   /// Initialises the foreground-task configuration (Android notification
   /// channel + interval). Call once at app startup, before [start].
@@ -101,6 +117,11 @@ class LocationStreamingService {
     if (_running) return;
     _running = true;
     _lastPosted = null;
+    WidgetsBinding.instance.addObserver(this);
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      (_) => flush(),
+    );
+    await _refreshQueueState();
 
     // Start the Android foreground service so the OS doesn't suspend the app.
     // If the OS refuses it, tracking still runs while the app is open, so a
@@ -117,8 +138,8 @@ class LocationStreamingService {
     }
 
     // Fire immediately, then every 30 s.
-    await _tick();
-    _timer = Timer.periodic(_kInterval, (_) => _tick());
+    await _runTick();
+    _timer = Timer.periodic(_kInterval, (_) => _runTick());
   }
 
   /// Reads the phone's GPS position once, for the check-in record.
@@ -144,20 +165,32 @@ class LocationStreamingService {
     _running = false;
     _timer?.cancel();
     _timer = null;
+    await _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+    WidgetsBinding.instance.removeObserver(this);
+    await _activeTick;
+    await _activeFlush;
     _lastPosted = null;
     await FlutterForegroundTask.stopService();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _running) flush();
   }
 
   /// Checks the current GPS position and posts if moved far enough.
   /// Errors are swallowed — a missed ping is acceptable; a crash is not.
   Future<void> _tick() async {
     try {
+      await flush();
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 10),
         ),
       );
+      if (!_running) return;
 
       final last = _lastPosted;
       final moved =
@@ -171,11 +204,94 @@ class LocationStreamingService {
               _kThresholdMetres;
 
       if (moved) {
-        await _homeService.sendLocationPing(pos.latitude, pos.longitude);
-        _lastPosted = pos;
+        final ownerId = _homeService.currentUserId;
+        if (ownerId == null) return;
+        try {
+          final accepted = await _homeService.sendLocationPing(
+            pos.latitude,
+            pos.longitude,
+          );
+          if (accepted) {
+            _lastPosted = pos;
+            await _queue.remove(ownerId: ownerId);
+          } else {
+            await _queue.save(
+              ownerId: ownerId,
+              latitude: pos.latitude,
+              longitude: pos.longitude,
+              capturedAt: pos.timestamp,
+            );
+          }
+        } catch (error) {
+          if (error is ApiException && error.isNetwork) {
+            await _queue.save(
+              ownerId: ownerId,
+              latitude: pos.latitude,
+              longitude: pos.longitude,
+              capturedAt: pos.timestamp,
+            );
+          } else {
+            rethrow;
+          }
+        }
+        await _refreshQueueState();
       }
     } catch (_) {
       // GPS unavailable or network error — skip this tick silently.
     }
+  }
+
+  Future<void> flush() async {
+    if (_activeFlush != null) return _activeFlush!;
+    if (!_running || _isFlushing) return;
+    final operation = _flushInternal();
+    _activeFlush = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_activeFlush, operation)) _activeFlush = null;
+    }
+  }
+
+  Future<void> _flushInternal() async {
+    final ownerId = _homeService.currentUserId;
+    if (ownerId == null) return;
+    _isFlushing = true;
+    _isSyncing = true;
+    onStatusChanged?.call();
+    try {
+      final pending = await _queue.peek(ownerId: ownerId);
+      if (pending == null) return;
+      final accepted = await _homeService.sendLocationPing(
+        (pending['latitude'] as num).toDouble(),
+        (pending['longitude'] as num).toDouble(),
+      );
+      if (accepted) await _queue.remove(ownerId: ownerId);
+    } catch (_) {
+      // Keep the row for the next connectivity event or timer tick.
+    } finally {
+      _isFlushing = false;
+      _isSyncing = false;
+      await _refreshQueueState();
+    }
+  }
+
+  Future<void> _runTick() async {
+    if (_activeTick != null) return _activeTick!;
+    final operation = _tick();
+    _activeTick = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_activeTick, operation)) _activeTick = null;
+    }
+  }
+
+  Future<void> _refreshQueueState() async {
+    final ownerId = _homeService.currentUserId;
+    _pendingCount = ownerId == null
+        ? 0
+        : await _queue.count(ownerId: ownerId);
+    onStatusChanged?.call();
   }
 }

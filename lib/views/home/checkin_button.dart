@@ -259,6 +259,11 @@ class _LocationLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final loading = home.isLocationLoading;
     final address = home.locationLabel;
+    final syncText = home.isLocationSyncing
+        ? 'Syncing location'
+        : home.pendingLocationCount > 0
+        ? '${home.pendingLocationCount} location pending'
+        : null;
     final text =
         address ??
         (home.locationFailed
@@ -271,11 +276,21 @@ class _LocationLine extends StatelessWidget {
         const Icon(Icons.place_rounded, size: 16, color: OgeraColors.success),
         const SizedBox(width: 6),
         Flexible(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              if (syncText != null)
+                Text(
+                  syncText,
+                  style: const TextStyle(fontSize: 11, color: OgeraColors.warning),
+                ),
+            ],
           ),
         ),
         const SizedBox(width: 2),

@@ -62,6 +62,8 @@ class HomeService {
 
   final ApiClient _api;
 
+  int? get currentUserId => _api.currentUserId;
+
   /// Fetches dashboard KPIs for one time range.
   /// [range] is 'today', '7d', or 'month'.
   Future<DashboardKpis> summary(String range) async {
@@ -105,11 +107,13 @@ class HomeService {
   }
 
   /// Sends a single GPS ping to the server (background streaming).
-  Future<void> sendLocationPing(double lat, double lng) async {
-    await _api.post(
+  /// Returns false when the server accepted but throttled the point.
+  Future<bool> sendLocationPing(double lat, double lng) async {
+    final data = await _api.post(
       '/staff/location',
       body: {'latitude': lat, 'longitude': lng},
     );
+    return !(data is Map && data['throttled'] == true);
   }
 
   /// Returns the 10 most recently added consumer contacts created on or after

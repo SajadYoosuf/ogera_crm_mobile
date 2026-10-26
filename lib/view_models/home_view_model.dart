@@ -82,7 +82,9 @@ class HomeViewModel extends ChangeNotifier {
     LocationStreamingService? location,
     GeocodingService? geocoder,
   }) : _location = location ?? LocationStreamingService(_service),
-       _geocoder = geocoder ?? GeocodingService();
+       _geocoder = geocoder ?? GeocodingService() {
+    _location.onStatusChanged = notifyListeners;
+  }
 
   final HomeService _service;
   final LocationStreamingService _location;
@@ -155,6 +157,8 @@ class HomeViewModel extends ChangeNotifier {
   String? get locationLabel => _locationLabel;
   bool get isLocationLoading => _isLocationLoading;
   bool get locationFailed => _locationFailed;
+  int get pendingLocationCount => _location.pendingCount;
+  bool get isLocationSyncing => _location.isSyncing;
 
   /// The KPIs for the currently selected range (empty if not yet loaded).
   DashboardKpis get kpis => _kpis[_range] ?? DashboardKpis.empty();
