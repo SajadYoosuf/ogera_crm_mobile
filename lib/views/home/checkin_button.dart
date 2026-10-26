@@ -295,22 +295,112 @@ class _LocationLine extends StatelessWidget {
         ),
         const SizedBox(width: 2),
         IconButton(
-          tooltip: 'Refresh location',
+          tooltip: 'Location details',
           visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 28, height: 28),
           iconSize: 16,
           color: OgeraColors.muted,
-          onPressed: loading ? null : () => home.refreshLocation(),
+          onPressed: loading ? null : () => _showLocationDetails(context, home),
           icon: loading
               ? const SizedBox(
                   width: 14,
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.refresh_rounded),
+              : const Icon(Icons.keyboard_arrow_down_rounded),
         ),
       ],
+    );
+  }
+}
+
+Future<void> _showLocationDetails(BuildContext context, HomeViewModel home) async {
+  await home.loadLocationHistory();
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _LocationDetailsSheet(home: home),
+  );
+}
+
+class _LocationDetailsSheet extends StatelessWidget {
+  const _LocationDetailsSheet({required this.home});
+
+  final HomeViewModel home;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .72,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Location details',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                home.isLocationSyncing
+                    ? 'Syncing a location…'
+                    : home.pendingLocationCount > 0
+                    ? '${home.pendingLocationCount} pending locally'
+                    : 'No pending local locations',
+                style: const TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Server history — today',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _serverHistory(context)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _serverHistory(BuildContext context) {
+    if (home.isLocationHistoryLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (home.locationHistoryError != null) {
+      return Center(child: Text(home.locationHistoryError!));
+    }
+    if (home.locationHistory.isEmpty) {
+      return const Center(child: Text('No locations received by the server today.'));
+    }
+    return ListView.separated(
+      itemCount: home.locationHistory.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, index) {
+        final point =
+            home.locationHistory[home.locationHistory.length - index - 1];
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
+          title: Text(formatMoment(point.recordedAt)),
+          subtitle: Text(
+            '${point.latitude.toStringAsFixed(6)}, '
+            '${point.longitude.toStringAsFixed(6)}',
+          ),
+          trailing: const Text(
+            'Saved',
+            style: TextStyle(fontSize: 12, color: Colors.green),
+          ),
+        );
+      },
     );
   }
 }

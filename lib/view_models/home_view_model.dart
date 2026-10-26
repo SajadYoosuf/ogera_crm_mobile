@@ -33,6 +33,7 @@ import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
 import '../models/attendance.dart';
 import '../models/followup.dart';
+import '../models/staff_location_history.dart';
 import '../services/geocoding_service.dart';
 import '../services/home_service.dart';
 import '../services/location_streaming_service.dart';
@@ -105,6 +106,9 @@ class HomeViewModel extends ChangeNotifier {
   String? _locationLabel;
   bool _isLocationLoading = false;
   bool _locationFailed = false;
+  List<StaffLocationHistoryPoint> _locationHistory = const [];
+  bool _isLocationHistoryLoading = false;
+  String? _locationHistoryError;
 
   final Map<KpiRange, DashboardKpis> _kpis = {};
   KpiRange _range = KpiRange.today;
@@ -159,6 +163,23 @@ class HomeViewModel extends ChangeNotifier {
   bool get locationFailed => _locationFailed;
   int get pendingLocationCount => _location.pendingCount;
   bool get isLocationSyncing => _location.isSyncing;
+  List<StaffLocationHistoryPoint> get locationHistory => _locationHistory;
+  bool get isLocationHistoryLoading => _isLocationHistoryLoading;
+  String? get locationHistoryError => _locationHistoryError;
+
+  Future<void> loadLocationHistory() async {
+    _isLocationHistoryLoading = true;
+    _locationHistoryError = null;
+    notifyListeners();
+    try {
+      _locationHistory = await _service.getLocationHistory(date: todayIso());
+    } catch (_) {
+      _locationHistoryError = 'Could not load server location history.';
+    } finally {
+      _isLocationHistoryLoading = false;
+      notifyListeners();
+    }
+  }
 
   /// The KPIs for the currently selected range (empty if not yet loaded).
   DashboardKpis get kpis => _kpis[_range] ?? DashboardKpis.empty();

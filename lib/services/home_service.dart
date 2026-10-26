@@ -16,6 +16,7 @@ import '../core/utils/formatters.dart';
 import '../models/attendance.dart';
 import '../models/followup.dart';
 import '../models/staff_last_location.dart';
+import '../models/staff_location_history.dart';
 import 'tasks_service.dart';
 
 /// Holds the numeric KPIs the home screen shows.
@@ -104,6 +105,25 @@ class HomeService {
     final data = await _api.get('/staff/location/me');
     if (data == null) return null;
     return StaffLastLocation.fromJson(asMap(data));
+  }
+
+  /// Returns today's server-accepted location history for the signed-in user.
+  Future<List<StaffLocationHistoryPoint>> getLocationHistory({
+    required String date,
+  }) async {
+    final data = await _api.get(
+      '/staff/location/history',
+      query: {'date': date},
+    );
+    final rows = data is List
+        ? data
+        : (data is Map && data['points'] is List
+              ? data['points'] as List
+              : const []);
+    return [
+      for (final row in rows)
+        StaffLocationHistoryPoint.fromJson(row as Map<String, dynamic>),
+    ];
   }
 
   /// Sends a single GPS ping to the server (background streaming).
