@@ -370,6 +370,32 @@ class ContactCard extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (contact.createdByEmployee != null) ...[
+                  const SizedBox(height: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.badge_outlined, size: 14, color: OgeraColors.muted),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Created by ${contact.createdByEmployee!.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11.5, color: OgeraColors.muted),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Branch: ${contact.createdByEmployee!.branch?.isNotEmpty == true ? contact.createdByEmployee!.branch : 'Not available'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11.5, color: OgeraColors.muted),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

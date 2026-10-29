@@ -603,9 +603,11 @@ class _AddContactSheetState extends State<AddContactSheet> {
             allProducts: _allProducts,
             selected: _selectedProducts,
             onChanged: (products) => setState(() {
+              // The API accepts one interested product. Selecting another
+              // product replaces the previous choice.
               _selectedProducts
                 ..clear()
-                ..addAll(products);
+                ..addAll(products.isEmpty ? const <Product>[] : [products.last]);
             }),
           ),
       ],
@@ -1005,8 +1007,8 @@ class _ReferralField extends StatelessWidget {
   }
 }
 
-/// Multi-select product picker row. Tapping opens a picker sheet; selected
-/// products show as removable chips below.
+/// Single-product picker row. Tapping opens a picker sheet; the selected
+/// product shows as a removable chip below.
 class _ProductsField extends StatelessWidget {
   const _ProductsField({
     required this.allProducts,
@@ -1028,7 +1030,7 @@ class _ProductsField extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: () => _pick(context),
             icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-            label: const Text('Products interested'),
+            label: const Text('Product interested in'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(0, 48),
               foregroundColor: OgeraColors.blue,
@@ -1060,7 +1062,7 @@ class _ProductsField extends StatelessWidget {
   Future<void> _pick(BuildContext context) async {
     final picked = await showOptionPicker<Product>(
       context,
-      title: 'Products interested',
+      title: 'Product interested in',
       options: allProducts,
       labelOf: (p) => p.name,
       selected: selected.isNotEmpty ? selected.first : null,
@@ -1068,8 +1070,7 @@ class _ProductsField extends StatelessWidget {
       searchHint: 'Search product',
     );
     if (picked == null) return;
-    if (selected.any((p) => p.id == picked.id)) return;
-    onChanged([...selected, picked]);
+    onChanged([picked]);
   }
 }
 

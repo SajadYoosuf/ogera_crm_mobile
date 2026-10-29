@@ -465,6 +465,18 @@ class Contact {
     final assigned = json['assigned_to'];
     // `created_by` is an int in the detail and {id, name} in the list.
     final creator = json['created_by'];
+    final creatorRef = EmployeeRef.fromJson(creator);
+    final creatorBranch = asText(json['created_by_branch']);
+    final creatorEmployee = creatorRef == null
+        ? null
+        : EmployeeRef(
+            id: creatorRef.id,
+            name: creatorRef.name,
+            email: creatorRef.email,
+            role: creatorRef.role,
+            phone: creatorRef.phone,
+            branch: creatorRef.branch ?? creatorBranch,
+          );
 
     return Contact(
       id: asInt(json['id']) ?? 0,
@@ -488,7 +500,7 @@ class Contact {
           EmployeeRef.fromJson(json['assigned_employee']) ??
           EmployeeRef.fromJson(assigned),
       createdBy: creator is Map ? asInt(creator['id']) : asInt(creator),
-      createdByEmployee: EmployeeRef.fromJson(creator),
+      createdByEmployee: creatorEmployee,
       createdAt: parseDate(json['created_at']) ?? DateTime.now(),
       updatedAt: parseDate(json['updated_at']),
       deletedAt: parseDate(json['deleted_at']),
@@ -588,8 +600,8 @@ class ContactDraft {
   int? referredByContactId;
   int? assignedTo;
 
-  /// `null` means "do not send" (keep the existing list on update).
-  /// An empty list clears the list on update.
+  /// `null` means "do not send" (keep the existing product on update).
+  /// An empty list clears the product on update; otherwise this contains one id.
   List<int>? interestedProductIds;
 
   factory ContactDraft.fromContact(Contact contact) {

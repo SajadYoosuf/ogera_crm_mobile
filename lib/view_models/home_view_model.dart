@@ -91,6 +91,10 @@ class HomeViewModel extends ChangeNotifier {
   final LocationStreamingService _location;
   final GeocodingService _geocoder;
 
+  bool _loadInProgress = false;
+  int _recentLeadsRequest = 0;
+  int _homeTasksRequest = 0;
+
   bool _isLoading = false;
   bool _isCheckinLoading = false;
   String? _error;
@@ -184,9 +188,18 @@ class HomeViewModel extends ChangeNotifier {
   /// The KPIs for the currently selected range (empty if not yet loaded).
   DashboardKpis get kpis => _kpis[_range] ?? DashboardKpis.empty();
 
-  /// Loads all three KPI ranges, today's attendance, recent leads, and
-  /// today's tasks.
+  /// Loads the visible KPI range, today's attendance, recent leads, and tasks.
   Future<void> load() async {
+    if (_loadInProgress) return;
+    _loadInProgress = true;
+    try {
+      await _loadInternal();
+    } finally {
+      _loadInProgress = false;
+    }
+  }
+
+  Future<void> _loadInternal() async {
     // Set ALL loading flags before the first notifyListeners so the whole
     // Home tab gets one rebuild into "loading" state instead of 4 rapid ones.
     _isLoading = true;
@@ -201,14 +214,7 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners(); // single "everything is loading" rebuild
 
     try {
-      final results = await Future.wait([
-        _service.summary(KpiRange.today.apiValue),
-        _service.summary(KpiRange.week.apiValue),
-        _service.summary(KpiRange.month.apiValue),
-      ]);
-      _kpis[KpiRange.today] = results[0];
-      _kpis[KpiRange.week] = results[1];
-      _kpis[KpiRange.month] = results[2];
+      _kpis[_range] = await _service.summary(_range.apiValue);
     } catch (e) {
       final failure = describeFailure(e);
       _error = failure.message;
@@ -230,11 +236,19 @@ class HomeViewModel extends ChangeNotifier {
     ]);
   }
 
-  /// Switches the visible KPI range; no network call.
-  void setRange(KpiRange range) {
+  /// Switches the visible KPI range and fetches it only the first time.
+  Future<void> setRange(KpiRange range) async {
     if (_range == range) return;
     _range = range;
     notifyListeners();
+    if (_kpis[range] == null) {
+      try {
+        _kpis[range] = await _service.summary(range.apiValue);
+        notifyListeners();
+      } catch (_) {
+        // The existing dashboard remains visible; a later selection retries.
+      }
+    }
   }
 
   // ── Attendance ────────────────────────────────────────────────────────────
@@ -370,6 +384,7 @@ class HomeViewModel extends ChangeNotifier {
   // [silent] skips the "loading=true + notifyListeners" at the top because
   // load() already set those flags and fired one batched notifyListeners.
   Future<void> _loadRecentLeads(KpiRange range, {bool silent = false}) async {
+    final request = ++_recentLeadsRequest;
     if (!silent) {
       _isRecentLeadsLoading = true;
       _recentLeadsError = null;
@@ -380,13 +395,17 @@ class HomeViewModel extends ChangeNotifier {
       _recentLeads = await _service.fetchRecentLeads(
         startDate: _rangeStartDate(range),
       );
+      if (request != _recentLeadsRequest) return;
     } catch (e) {
+      if (request != _recentLeadsRequest) return;
       final failure = describeFailure(e);
       _recentLeadsError = failure.message;
       _recentLeadsErrorKind = failure.kind;
     } finally {
-      _isRecentLeadsLoading = false;
-      notifyListeners();
+      if (request == _recentLeadsRequest) {
+        _isRecentLeadsLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -406,6 +425,7 @@ class HomeViewModel extends ChangeNotifier {
   // [silent] skips the "loading=true + notifyListeners" at the top because
   // load() already set those flags and fired one batched notifyListeners.
   Future<void> _loadHomeTasks(KpiRange range, {bool silent = false}) async {
+    final request = ++_homeTasksRequest;
     if (!silent) {
       _isHomeTasksLoading = true;
       _homeTasksError = null;
@@ -416,13 +436,16 @@ class HomeViewModel extends ChangeNotifier {
       final from = _rangeStartDate(range);
       final to = isoDate(DateTime.now());
       _homeTasks = await _service.fetchHomeTasks(dateFrom: from, dateTo: to);
+      if (request != _homeTasksRequest) return;
     } catch (e) {
       final failure = describeFailure(e);
       _homeTasksError = failure.message;
       _homeTasksErrorKind = failure.kind;
     } finally {
-      _isHomeTasksLoading = false;
-      notifyListeners();
+      if (request == _homeTasksRequest) {
+        _isHomeTasksLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -439,5 +462,12 @@ class HomeViewModel extends ChangeNotifier {
       KpiRange.month => now.subtract(const Duration(days: 29)),
     };
     return isoDate(start);
+  }
+
+  @override
+  void dispose() {
+    _location.onStatusChanged = null;
+    unawaited(_location.stop());
+    super.dispose();
   }
 }
