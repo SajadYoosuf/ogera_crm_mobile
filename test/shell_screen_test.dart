@@ -168,7 +168,7 @@ Future<Widget> _shellHarness({required UserRole role}) async {
       'total': 0,
       'summary': {'overdue': 0, 'today': 0, 'upcoming': 0, 'done': 0},
     },
-    '/contacts/stage-types': (_) => [
+    '/pipeline/stages': (_) => [
       stageJson(id: 'new', label: 'New', orderIndex: 0),
     ],
     '/pipeline/contacts': (_) => {

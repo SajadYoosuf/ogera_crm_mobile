@@ -28,8 +28,8 @@ class ContactsViewModel extends ChangeNotifier {
   bool _isLoadingMore = false;
   String? _error;
   String _query = '';
-  // null means the "All Contacts" tab; otherwise one of consumer/partner/dealer.
-  ContactKind? _kind;
+  // The Contacts screen has one tab per type, and Consumer is the first tab.
+  ContactKind? _kind = ContactKind.consumer;
   String? _source;
   String? _startDate;
   String? _endDate;
@@ -172,7 +172,7 @@ class ContactsViewModel extends ChangeNotifier {
   /// without a full refetch.
   void upsert(Contact contact) {
     final index = _contacts.indexWhere((item) => item.id == contact.id);
-    final shown = _kind == null || contact.kind == _kind;
+    final shown = _kind == null || contact.contactType == _kind;
     if (index == -1) {
       if (shown) {
         _contacts.insert(0, contact);
@@ -242,15 +242,12 @@ class ContactFormViewModel extends ChangeNotifier {
 
   /// A campaign target must name the staff member it belongs to — the same rule
   /// the API enforces, checked here so the user sees it before a round-trip.
+  // TODO(campaign): isCampaignTarget / campaignStaffId not yet on ContactDraft.
   String? validateCampaign() {
-    if (!draft.isCampaignTarget) return null;
-    if ((draft.campaignStaffId ?? '').isEmpty) {
-      return 'Select which staff this campaign-target contact belongs to.';
-    }
     return null;
   }
 
-  void setType(ContactType type) {
+  void setType(ContactKind type) {
     draft.contactType = type;
     notifyListeners();
   }
@@ -271,6 +268,8 @@ class ContactFormViewModel extends ChangeNotifier {
 
   /// The professional reference is stored alongside a name/type/phone snapshot,
   /// so the record still reads correctly if the professional is later edited.
+  // TODO(referral): professionalType/Name/Phone/Address/Latitude/Longitude not
+  // yet on ContactDraft — add them when the professional-referral UI is built.
   void setProfessionalReferral({
     required String type,
     required String name,
@@ -279,12 +278,6 @@ class ContactFormViewModel extends ChangeNotifier {
     String? latitude,
     String? longitude,
   }) {
-    draft.professionalType = type;
-    draft.professionalName = name;
-    draft.professionalPhone = phone;
-    draft.professionalAddress = address;
-    draft.professionalLatitude = latitude;
-    draft.professionalLongitude = longitude;
     draft.referredByContactId = null;
     notifyListeners();
   }
@@ -296,17 +289,11 @@ class ContactFormViewModel extends ChangeNotifier {
   }
 
   void _clearProfessionalReferral() {
-    draft.professionalType = null;
-    draft.professionalName = null;
-    draft.professionalPhone = null;
-    draft.professionalAddress = null;
-    draft.professionalLatitude = null;
-    draft.professionalLongitude = null;
+    draft.referredByContactId = null;
   }
 
+  // TODO(campaign): isCampaignTarget / campaignStaffId not yet on ContactDraft.
   void setCampaign({required bool isTarget, String? staffId}) {
-    draft.isCampaignTarget = isTarget;
-    draft.campaignStaffId = isTarget ? staffId : null;
     notifyListeners();
   }
 

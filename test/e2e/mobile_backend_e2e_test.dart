@@ -159,14 +159,14 @@ void main() {
         offline = await admin.contacts.create(draft);
 
         expect(offline.id, greaterThan(0));
-        expect(offline.contactType, ContactType.lead);
-        expect(offline.source, 'offline');
-        expect(offline.stage, 'new_lead');
+        expect(offline.contactType, ContactKind.consumer);
+        expect(offline.leadSource?.slug, 'offline');
+        expect(offline.currentStage?.stageSlug, 'new_lead');
         expect(offline.houseStage, 'Ready');
         expect(offline.hasLocation, isTrue);
-        expect(offline.lat, closeTo(11.2588, 1e-6));
-        expect(offline.followupAssignedUserId, isNotNull);
-        expect(offline.createdByUserId, admin.user.id);
+        expect(offline.latitude, closeTo(11.2588, 1e-6));
+        expect(offline.assignedTo, isNotNull);
+        expect(offline.createdBy, admin.user.id);
       },
     );
 
@@ -180,11 +180,11 @@ void main() {
             source: 'meta',
             district: 'Kannur',
             address: 'Main road',
-            contactType: ContactType.awareness,
+            contactType: ContactKind.consumer,
           ),
         );
-        expect(aware.contactType, ContactType.awareness);
-        expect(aware.source, 'meta');
+        expect(aware.contactType, ContactKind.consumer);
+        expect(aware.leadSource?.slug, 'meta');
         expect(aware.hasLocation, isFalse);
         // No house stage yet, so the API reports the gap.
         expect(aware.isVerified, isFalse);
@@ -251,7 +251,10 @@ void main() {
     test('filters by source, creator and date', () async {
       final today = todayIso();
       final bySource = await admin.contacts.list(source: 'offline');
-      expect(bySource.contacts.every((c) => c.source == 'offline'), isTrue);
+      expect(
+        bySource.contacts.every((c) => c.leadSource?.slug == 'offline'),
+        isTrue,
+      );
       expect(bySource.contacts.any((c) => c.id == offline.id), isTrue);
 
       final byCreator = await admin.contacts.list(
@@ -269,12 +272,13 @@ void main() {
     });
 
     test('the map shows only contacts that have a location', () async {
+      // mapPins returns raw rows until a ContactPin model exists.
       final pins = await admin.contacts.mapPins();
-      expect(pins.map((p) => p.id), contains(offline.id));
-      expect(pins.map((p) => p.id), isNot(contains(aware.id)));
-      final pin = pins.firstWhere((p) => p.id == offline.id);
-      expect(pin.latitude, closeTo(11.2588, 1e-6));
-      expect(pin.contactType, ContactType.lead);
+      expect(pins.map((p) => p['id']), contains(offline.id));
+      expect(pins.map((p) => p['id']), isNot(contains(aware.id)));
+      final pin = pins.firstWhere((p) => p['id'] == offline.id);
+      expect(pin['latitude'], closeTo(11.2588, 1e-6));
+      expect(pin['contact_type'], 'consumer');
     });
 
     test('detail, edit and the paging view model', () async {
@@ -310,7 +314,7 @@ void main() {
         ),
       );
       final detail = await admin.contacts.detail(referred.id);
-      expect(detail.referredByContactId, offline.id);
+      expect(detail.referredById, offline.id);
       expect(detail.referralSummary, startsWith('Contact · Arun'));
       await admin.contacts.delete(referred.id);
     });
@@ -404,7 +408,7 @@ void main() {
         ),
       );
       expect(
-        (await admin.contacts.detail(contact.id)).referredByContactName,
+        (await admin.contacts.detail(contact.id)).referredBy?.displayName,
         'Kumar Architect',
       );
     });

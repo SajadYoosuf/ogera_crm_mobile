@@ -204,13 +204,14 @@ class _HeadBoardState extends State<_HeadBoard> {
 
 Future<void> openLeadForm(BuildContext context) async {
   final contacts = context.read<ContactsViewModel>();
+  final followups = context.read<FollowupsViewModel>();
   final created = await pushShellRoute<dynamic>(
     context,
     (_) => const ContactFormScreen(),
   );
   if (created != null) {
     contacts.refresh();
-    context.read<FollowupsViewModel>().refresh();
+    followups.refresh();
   }
 }
 

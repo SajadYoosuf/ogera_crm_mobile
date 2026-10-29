@@ -1,9 +1,15 @@
 /// Tasks service.
 ///
 /// WHAT IT DOES:
-///   Wraps GET /tasks and PATCH /tasks/{id}.
+///   Talks to the follow-up endpoints for the Tasks tab:
+///   - GET /tasks                                   → the signed-in user's tasks
+///   - PATCH /contacts/{id}/followups/{task}        → complete / status / reschedule
+///     (contact-linked tasks; the backend also writes the contact's activity log
+///      and auto-books a retry on "no answer" / "not now")
+///   - PATCH /tasks/{task}                          → same body, for standalone tasks
+///   - POST  /contacts/{id}/followups               → book the next follow-up
 ///
-/// BACKEND CONTRACT (as of the current FastAPI backend):
+/// BACKEND CONTRACT (FastAPI, routes/tasks.py + routes/followups.py):
 ///   GET /tasks response item fields:
 ///     id, title, type, notes, status ("pending"|"done"), priority,
 ///     scheduled_date (YYYY-MM-DD), scheduled_time (HH:MM:SS),
@@ -11,24 +17,29 @@
 ///     overdue_days, contact_id, contact_name, contact_phone, contact_type,
 ///     assigned_to, created_at
 ///
-///   PATCH /tasks/{id} body: { status?, outcome?, notes?, due_at? }
-///     - status is one of: todo, inprogress, completed, pending
-///     - outcome is REQUIRED when status=completed
-///     - due_at is for reschedule (mutually exclusive with status)
+///   PATCH body (exactly one of status / due_at):
+///     status:         "todo" | "inprogress" | "completed"
+///     outcome:        "done" | "not_now" | "no_answer"   (required with completed)
+///     notes:          free text, what was done
+///     actual_channel: the activity type actually used (optional)
+///     due_at:         naive local datetime, for reschedule
 library;
 
+import 'package:intl/intl.dart';
+
 import '../core/network/api_client.dart';
+import '../core/reference/crm_options.dart';
 import '../core/utils/formatters.dart';
+import 'crm_services.dart';
 
 // ---------------------------------------------------------------------------
 // Domain types
 // ---------------------------------------------------------------------------
 
-/// Display status values understood by the UI.
+/// Status values the UI and the PATCH endpoint understand.
 ///
-/// The backend returns "pending" or "done" in the response, but accepts
-/// "todo", "inprogress", "completed" on PATCH. We keep all values here
-/// and translate as needed.
+/// The list response only says "pending" or "done", so [fromResponseStatus]
+/// maps it to a UI status.
 enum TaskStatus {
   todo('todo', 'To Do'),
   inProgress('inprogress', 'In Progress'),
@@ -50,6 +61,17 @@ enum TaskStatus {
         return TaskStatus.todo;
     }
   }
+}
+
+/// What happened on a task. The backend accepts only these three values.
+enum TaskOutcome {
+  done('done', 'Done'),
+  notNow('not_now', 'Not now'),
+  noAnswer('no_answer', 'No answer');
+
+  const TaskOutcome(this.value, this.label);
+  final String value;
+  final String label;
 }
 
 enum TaskPriority {
@@ -133,6 +155,9 @@ class Task {
   final int assignedTo;
   final DateTime createdAt;
 
+  /// True once the task is completed (the backend reports it as "done").
+  bool get isDone => taskState == TaskState.done;
+
   /// The combined scheduled date+time as a [DateTime].
   DateTime get scheduledAt {
     try {
@@ -158,7 +183,8 @@ class Task {
     contactPhone: asText(json['contact_phone']),
     contactType: asText(json['contact_type']),
     assignedTo: asInt(json['assigned_to']) ?? 0,
-    createdAt: DateTime.tryParse(asText(json['created_at']) ?? '') ?? DateTime.now(),
+    createdAt:
+        DateTime.tryParse(asText(json['created_at']) ?? '') ?? DateTime.now(),
   );
 }
 
@@ -184,6 +210,13 @@ class TaskSummary {
   );
 }
 
+/// Activity-type values that cannot be a task type. Internal notes are logs, not tasks.
+const _notTaskTypes = {'internal_note'};
+
+/// The app stores some activity types under short names (see the backend's
+/// STORED_CHANNELS). A PATCH with the stored name avoids a false "channel changed" edit log.
+const _storedChannelNames = {'phone_call': 'call', 'field_visit': 'visit'};
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -193,11 +226,13 @@ class TasksService {
 
   final ApiClient _api;
 
-  /// Returns a paged list of tasks with a summary.
+  /// Returns a page of the signed-in user's tasks with a summary.
+  ///
+  /// The `assigned_to` filter is always sent, so the screen shows only tasks
+  /// assigned to the person logged in on this phone.
   ///
   /// [dateFrom]/[dateTo] are ISO date strings (YYYY-MM-DD).
-  /// [status] accepts "open", "todo", "inprogress", "completed", "all",
-  /// "due_today", "overdue".
+  /// [statusFilter] accepts "open", "todo", "inprogress", "completed", "all".
   Future<({List<Task> items, int total, TaskSummary summary})> list({
     String statusFilter = 'open',
     TaskPriority? priority,
@@ -207,13 +242,18 @@ class TasksService {
     int skip = 0,
     int limit = 50,
   }) async {
+    final owner = _api.currentUserId;
+    if (owner == null) {
+      throw const ApiException('Sign in again to see your tasks.');
+    }
     final query = <String, dynamic>{
       'skip': skip,
       'limit': limit,
       'status': statusFilter,
-      if (priority != null) 'priority': priority.value,
-      if (dateFrom != null) 'date_from': dateFrom,
-      if (dateTo != null) 'date_to': dateTo,
+      'assigned_to': owner,
+      'priority': ?priority?.value,
+      'date_from': ?dateFrom,
+      'date_to': ?dateTo,
       if (includeOverdue) 'include_overdue': true,
     };
     final data = asMap(await _api.get('/tasks', query: query));
@@ -223,26 +263,83 @@ class TasksService {
     return (items: items, total: total, summary: summary);
   }
 
-  /// Marks a task complete with an outcome.
+  /// Activity types the employee can pick for a task, as {value: label}.
   ///
-  /// [outcome] is required by the backend when marking completed.
-  Future<void> complete(int id, {required String outcome, String? notes}) async {
-    await _api.patch('/tasks/$id', body: {
-      'status': 'completed',
-      'outcome': outcome,
-      if (notes != null && notes.isNotEmpty) 'notes': notes,
-    });
+  /// Uses the Settings list, with the built-in list as a fallback so the
+  /// picker is never empty.
+  Future<Map<String, String>> taskTypes() async {
+    final all = await SettingsOptionsCatalog.of(
+      _api,
+    ).options('activity_type', fallback: CrmOptions.defaultActivityTypes);
+    return {
+      for (final entry in all.entries)
+        if (!_notTaskTypes.contains(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  /// Marks a task completed.
+  ///
+  /// [outcome] is one of [TaskOutcome]; [notes] says what was done;
+  /// [activityType] is the task type actually used.
+  Future<void> complete(
+    Task task, {
+    required TaskOutcome outcome,
+    required String notes,
+    required String activityType,
+  }) async {
+    await _api.patch(
+      _taskPath(task),
+      body: {
+        'status': 'completed',
+        'outcome': outcome.value,
+        'notes': notes.trim(),
+        'actual_channel': _storedChannelNames[activityType] ?? activityType,
+      },
+    );
   }
 
   /// Changes a task's status (todo ↔ inprogress).
-  Future<void> updateStatus(int id, TaskStatus status) async {
-    await _api.patch('/tasks/$id', body: {'status': status.value});
+  Future<void> updateStatus(Task task, TaskStatus status) async {
+    await _api.patch(_taskPath(task), body: {'status': status.value});
   }
 
-  /// Reschedules a task to a new date/time.
-  ///
-  /// [dueAt] is an ISO-8601 datetime string (e.g. "2026-10-25T14:00:00").
-  Future<void> reschedule(int id, String dueAt) async {
-    await _api.patch('/tasks/$id', body: {'due_at': dueAt});
+  /// Reschedules a task to [dueAt] (local time, sent without a timezone like the web app).
+  Future<void> reschedule(Task task, DateTime dueAt) async {
+    await _api.patch(_taskPath(task), body: {'due_at': _localIso(dueAt)});
   }
+
+  /// Books the next follow-up with a contact, assigned to [assignedTo].
+  ///
+  /// The backend needs a due time, so the caller passes one (the sheet uses
+  /// tomorrow 23:59, the same default the web app uses for "no time").
+  Future<void> scheduleNextFollowup({
+    required int contactId,
+    required String activityType,
+    required DateTime dueAt,
+    int? assignedTo,
+  }) async {
+    // Defaults to the person on this phone: the employee who completes a task books its follow-up.
+    final owner = assignedTo ?? _api.currentUserId;
+    if (owner == null) {
+      throw const ApiException('Sign in again to schedule a follow-up.');
+    }
+    await _api.post(
+      '/contacts/$contactId/followups',
+      body: {
+        'channel': activityType,
+        'due_at': _localIso(dueAt),
+        'assigned_to': owner,
+      },
+    );
+  }
+
+  /// Contact-linked tasks use the contact route, which also writes the
+  /// activity log and books retries. Standalone tasks use the /tasks route.
+  String _taskPath(Task task) => task.contactId == null
+      ? '/tasks/${task.id}'
+      : '/contacts/${task.contactId}/followups/${task.id}';
+
+  /// "2026-10-25T23:59:00" — the naive local format the backend expects.
+  String _localIso(DateTime value) =>
+      DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(value);
 }

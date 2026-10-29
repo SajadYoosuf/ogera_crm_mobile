@@ -23,6 +23,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../core/network/api_client.dart';
 import '../services/pipeline_service.dart';
 
 // ─── contact type enum ─────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ class PipelineViewModel extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  FailureKind? _errorKind;
 
   PipelineContactType _activeType = PipelineContactType.consumer;
 
@@ -66,6 +68,7 @@ class PipelineViewModel extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get error => _error;
+  FailureKind? get errorKind => _errorKind;
   PipelineContactType get activeType => _activeType;
   List<PipelineStageModel> get stages => List.unmodifiable(_stages);
   PipelineStageModel? get selectedStage => _selectedStage;
@@ -93,6 +96,7 @@ class PipelineViewModel extends ChangeNotifier {
   Future<void> load() async {
     _isLoading = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
 
     try {
@@ -111,7 +115,9 @@ class PipelineViewModel extends ChangeNotifier {
         );
       }
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -5,7 +5,10 @@
 ///   - Title (or phone if no title), contact name
 ///   - Scheduled date + time, overdue badge
 ///   - Priority badge
-///   - Tap to open the status-change sheet
+///   - Tap to open the task detail sheet
+///
+/// The icon, colour and label helpers at the bottom are public so the detail
+/// sheet and the home list show tasks the same way.
 library;
 
 import 'package:flutter/material.dart';
@@ -16,7 +19,13 @@ import '../../theme/ogera_colors.dart';
 
 // ── Icon helpers ─────────────────────────────────────────────────────────────
 
-IconData _typeIcon(String type) {
+/// Shape for task bottom sheets: rounded top corners on a solid white surface.
+const taskSheetShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+);
+
+/// Icon for a task type value such as "phone_call" or "field_visit".
+IconData taskTypeIcon(String type) {
   switch (type) {
     case 'call':
     case 'phone_call':
@@ -33,7 +42,8 @@ IconData _typeIcon(String type) {
   }
 }
 
-Color _stateColor(TaskState state) {
+/// Accent colour for a task state (overdue red, due today amber, ...).
+Color taskStateColor(TaskState state) {
   switch (state) {
     case TaskState.overdue:
       return OgeraColors.danger;
@@ -46,7 +56,8 @@ Color _stateColor(TaskState state) {
   }
 }
 
-String _stateLabel(TaskState state, int overdueDays) {
+/// Short state text shown on chips, e.g. "Overdue 2 d".
+String taskStateLabel(TaskState state, int overdueDays) {
   switch (state) {
     case TaskState.overdue:
       return 'Overdue $overdueDays d';
@@ -59,7 +70,8 @@ String _stateLabel(TaskState state, int overdueDays) {
   }
 }
 
-Color _priorityColor(TaskPriority p) {
+/// Dot colour for a priority: high red, medium amber, low grey.
+Color taskPriorityColor(TaskPriority p) {
   switch (p) {
     case TaskPriority.high:
       return OgeraColors.danger;
@@ -71,19 +83,15 @@ Color _priorityColor(TaskPriority p) {
 }
 
 class TaskCard extends StatelessWidget {
-  const TaskCard({
-    super.key,
-    required this.task,
-    required this.onTap,
-  });
+  const TaskCard({super.key, required this.task, required this.onTap});
 
   final Task task;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final stateColor = _stateColor(task.taskState);
-    final icon = _typeIcon(task.taskType);
+    final stateColor = taskStateColor(task.taskState);
+    final icon = taskTypeIcon(task.taskType);
     final displayTitle = task.title?.isNotEmpty == true
         ? task.title!
         : task.contactPhone ?? 'Task';
@@ -138,14 +146,14 @@ class TaskCard extends StatelessWidget {
                 Row(
                   children: [
                     StatusChip(
-                      label: _stateLabel(task.taskState, task.overdueDays),
+                      label: taskStateLabel(task.taskState, task.overdueDays),
                       tone: task.taskState == TaskState.overdue
                           ? StatusTone.danger
                           : task.taskState == TaskState.dueToday
-                              ? StatusTone.warning
-                              : task.taskState == TaskState.done
-                                  ? StatusTone.success
-                                  : StatusTone.info,
+                          ? StatusTone.warning
+                          : task.taskState == TaskState.done
+                          ? StatusTone.success
+                          : StatusTone.info,
                       dense: true,
                     ),
                     const SizedBox(width: 6),
@@ -153,7 +161,7 @@ class TaskCard extends StatelessWidget {
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: _priorityColor(task.priority),
+                        color: taskPriorityColor(task.priority),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -162,7 +170,7 @@ class TaskCard extends StatelessWidget {
                       task.priority.label,
                       style: TextStyle(
                         fontSize: 11,
-                        color: _priorityColor(task.priority),
+                        color: taskPriorityColor(task.priority),
                         fontWeight: FontWeight.w500,
                       ),
                     ),

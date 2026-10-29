@@ -1,27 +1,25 @@
 import '../core/utils/formatters.dart';
 
-/// The mobile app's two kinds of consumer contact. The API has no such type:
-/// both are `consumer` contacts, told apart by the consumer profile's
-/// `awareness_mode` (1 = still needs education, 0 or unset = sales-ready).
-enum ContactType {
-  lead('lead', 'Lead'),
-  awareness('awareness', 'Awareness');
+/// Mobile model for the `/contacts` API.
+///
+/// Mirrors the backend contract in `ogera_crm_backend/schemas/contact.py`,
+/// `consumer_profile.py`, `partner_profile.py`, `dealer_profile.py`,
+/// `lead_stage.py`, `lead_source.py` and `employee.py`.
+///
+/// Two response shapes share one [Contact] class:
+///   - `GET /contacts` (list row, `ContactListItem`): identity, headline
+///     fields, `lead_stage`, `lead_source`, `assigned_to` and `created_by` as
+///     `{id, name}`, `is_verified`, `missing_fields`.
+///   - `GET /contacts/{id}`, `POST`, `PUT` (`ContactResponse`): everything,
+///     including the profile blocks, `current_stage`, `referred_by`,
+///     `interested_products` and `referrals_count`.
+/// Fields a shape does not send stay null (or empty for lists).
+///
+/// Awareness is not a contact type. It is the `aware` pipeline stage
+/// (see [LeadStageInfo.isAware]).
 
-  const ContactType(this.id, this.label);
-
-  final String id;
-  final String label;
-
-  static ContactType fromId(String? value) =>
-      value == 'awareness' ? ContactType.awareness : ContactType.lead;
-
-  /// The `awareness_mode` the API stores for this kind of contact.
-  int get awarenessMode => this == ContactType.awareness ? 1 : 0;
-}
-
-/// The three contact types the Contacts tab lists, matching the web tabs.
-/// `contact_type` in the API is one of these ids. Lead and awareness are not
-/// types; they are a stage or profile detail (see [ContactType]).
+/// The API's contact types (`ContactType` in `schemas/enums.py`). The value
+/// of `contact_type` in every request and response.
 enum ContactKind {
   consumer('consumer', 'Consumer'),
   partner('partner', 'Partner'),
@@ -32,8 +30,8 @@ enum ContactKind {
   final String id;
   final String label;
 
-  /// Reads the API's `contact_type`. Anything unknown is treated as a consumer,
-  /// the same default the API uses.
+  /// Reads `contact_type`. Anything unknown is treated as a consumer, the same
+  /// default the backend uses.
   static ContactKind fromId(String? value) => switch (value) {
     'partner' => ContactKind.partner,
     'dealer' => ContactKind.dealer,
@@ -74,283 +72,575 @@ class ContactTypeCounts {
   };
 }
 
-/// A consumer contact as returned by `GET /contacts` (slim row) or
-/// `GET /contacts/{id}` (full detail). Fields the API has no column for
-/// (panchayath, ward, water source, campaign flags and the like) stay null.
+/// The lead source of a contact (`LeadSourceSummary`).
+class LeadSourceRef {
+  const LeadSourceRef({
+    required this.id,
+    required this.name,
+    required this.slug,
+  });
+
+  final int id;
+  final String name;
+
+  /// Stable key such as `meta`, `website` or `offline`.
+  final String slug;
+
+  /// Null when the API sent no source.
+  static LeadSourceRef? fromJson(dynamic value) {
+    final map = _asMap(value);
+    final id = asInt(map?['id']);
+    if (map == null || id == null) return null;
+    return LeadSourceRef(
+      id: id,
+      name: asText(map['name']) ?? '',
+      slug: asText(map['slug']) ?? '',
+    );
+  }
+}
+
+/// An employee attached to a contact. The detail shape (`EmployeeSummary`)
+/// fills every field; the list shape (`NameRef`) fills only [id] and [name].
+class EmployeeRef {
+  const EmployeeRef({
+    required this.id,
+    required this.name,
+    this.email,
+    this.role,
+    this.phone,
+    this.branch,
+  });
+
+  final int id;
+  final String name;
+  final String? email;
+  final String? role;
+  final String? phone;
+  final String? branch;
+
+  static EmployeeRef? fromJson(dynamic value) {
+    final map = _asMap(value);
+    final id = asInt(map?['id']);
+    if (map == null || id == null) return null;
+    return EmployeeRef(
+      id: id,
+      name: asText(map['name']) ?? '',
+      email: asText(map['email']),
+      role: asText(map['role']),
+      phone: asText(map['phone']),
+      branch: asText(map['branch']),
+    );
+  }
+}
+
+/// The referrer of a contact (`ContactSummary`). Kept shallow on purpose:
+/// the backend does not nest a full contact inside another one.
+class ContactSummary {
+  const ContactSummary({
+    required this.id,
+    required this.phone,
+    required this.contactType,
+    this.name,
+    this.district,
+  });
+
+  final int id;
+  final String? name;
+  final String phone;
+  final ContactKind contactType;
+  final String? district;
+
+  String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
+
+  static ContactSummary? fromJson(dynamic value) {
+    final map = _asMap(value);
+    final id = asInt(map?['id']);
+    if (map == null || id == null) return null;
+    return ContactSummary(
+      id: id,
+      name: asText(map['name']),
+      phone: asText(map['phone']) ?? '',
+      contactType: ContactKind.fromId(asText(map['contact_type'])),
+      district: asText(map['district']),
+    );
+  }
+}
+
+/// A product the contact is interested in (`ProductRef`).
+class ProductRef {
+  const ProductRef({required this.id, required this.name});
+
+  final int id;
+  final String name;
+
+  static ProductRef? fromJson(dynamic value) {
+    final map = _asMap(value);
+    final id = asInt(map?['id']);
+    if (map == null || id == null) return null;
+    return ProductRef(id: id, name: asText(map['name']) ?? '');
+  }
+}
+
+/// A contact's pipeline stage. Used in both shapes: the list sends
+/// `LeadStageSummary` (no `id`, `changed_by` or notes); the detail sends the
+/// full `LeadStageResponse`.
+class LeadStageInfo {
+  const LeadStageInfo({
+    required this.stageId,
+    required this.stageSlug,
+    required this.stageName,
+    this.id,
+    this.contactType,
+    this.changedBy,
+    this.changedByName,
+    this.changedAt,
+    this.lossReason,
+    this.lossNotes,
+    this.awarenessNote,
+  });
+
+  final int? id;
+  final int stageId;
+  final String stageSlug;
+  final String stageName;
+  final String? contactType;
+  final int? changedBy;
+  final String? changedByName;
+  final DateTime? changedAt;
+  final String? lossReason;
+  final String? lossNotes;
+  final String? awarenessNote;
+
+  /// True once the contact has reached the awareness stage. This replaces
+  /// the old "awareness" contact type.
+  bool get isAware => stageSlug == 'aware';
+
+  bool get isLost => stageSlug == 'lost';
+
+  static LeadStageInfo? fromJson(dynamic value) {
+    final map = _asMap(value);
+    if (map == null) return null;
+    return LeadStageInfo(
+      id: asInt(map['id']),
+      stageId: asInt(map['stage_id']) ?? 0,
+      stageSlug: asText(map['stage_slug']) ?? '',
+      stageName: asText(map['stage_name']) ?? '',
+      contactType: asText(map['contact_type']),
+      changedBy: asInt(map['changed_by']),
+      changedByName: asText(map['changed_by_name']),
+      changedAt: parseDate(map['changed_at']),
+      lossReason: asText(map['loss_reason']),
+      lossNotes: asText(map['loss_notes']),
+      awarenessNote: asText(map['awareness_note']),
+    );
+  }
+}
+
+/// Consumer details (`ConsumerProfileResponse`). Only consumers have one.
+class ConsumerProfile {
+  const ConsumerProfile({
+    required this.id,
+    required this.contactId,
+    this.houseStage,
+    this.currentTankType,
+    this.currentTankCapacity,
+    this.currentTankAge,
+  });
+
+  final int id;
+  final int contactId;
+
+  /// One of the fixed house stages: `ready`, `under_construction`, `renovation`.
+  final String? houseStage;
+
+  /// One of the fixed tank types: `plastic`, `concrete`, `steel`, `other`.
+  final String? currentTankType;
+
+  /// Litres.
+  final int? currentTankCapacity;
+
+  /// Years.
+  final int? currentTankAge;
+
+  static ConsumerProfile? fromJson(dynamic value) {
+    final map = _asMap(value);
+    if (map == null) return null;
+    return ConsumerProfile(
+      id: asInt(map['id']) ?? 0,
+      contactId: asInt(map['contact_id']) ?? 0,
+      houseStage: asText(map['house_stage']),
+      currentTankType: asText(map['current_tank_type']),
+      currentTankCapacity: asInt(map['current_tank_capacity']),
+      currentTankAge: asInt(map['current_tank_age']),
+    );
+  }
+}
+
+/// Partner details (`PartnerProfileResponse`). Only partners have one.
+class PartnerProfile {
+  const PartnerProfile({
+    required this.id,
+    required this.contactId,
+    required this.professionType,
+    this.workArea,
+  });
+
+  final int id;
+  final int contactId;
+
+  /// Profession key such as `plumber` or `interior_designer`.
+  final String professionType;
+  final String? workArea;
+
+  static PartnerProfile? fromJson(dynamic value) {
+    final map = _asMap(value);
+    if (map == null) return null;
+    return PartnerProfile(
+      id: asInt(map['id']) ?? 0,
+      contactId: asInt(map['contact_id']) ?? 0,
+      professionType: asText(map['profession_type']) ?? '',
+      workArea: asText(map['work_area']),
+    );
+  }
+}
+
+/// Dealer details (`DealerProfileResponse`). Only dealers have one.
+class DealerProfile {
+  const DealerProfile({
+    required this.id,
+    required this.contactId,
+    required this.ownerName,
+    this.email,
+  });
+
+  final int id;
+  final int contactId;
+
+  /// The person at the dealer. The dealer's account name is [Contact.name].
+  final String ownerName;
+  final String? email;
+
+  static DealerProfile? fromJson(dynamic value) {
+    final map = _asMap(value);
+    if (map == null) return null;
+    return DealerProfile(
+      id: asInt(map['id']) ?? 0,
+      contactId: asInt(map['contact_id']) ?? 0,
+      ownerName: asText(map['owner_name']) ?? '',
+      email: asText(map['email']),
+    );
+  }
+}
+
+/// A contact as returned by `GET /contacts` (list row) or
+/// `GET /contacts/{id}`, `POST /contacts`, `PUT /contacts/{id}` (detail).
+/// See the file comment for which fields each shape sends.
 class Contact {
   const Contact({
     required this.id,
     required this.phone,
-    required this.contactType,
     required this.createdAt,
-    this.kind = ContactKind.consumer,
+    this.contactType = ContactKind.consumer,
     this.name,
-    this.countryCode,
-    this.source,
-    this.address,
+    this.phoneAlt,
     this.district,
-    this.panchayath,
-    this.ward,
-    this.houseStage,
-    this.currentTank,
-    this.waterSource,
-    this.tankSizeInterest,
-    this.awarenessLevel,
-    this.remarks,
+    this.address,
+    this.notes,
     this.latitude,
     this.longitude,
-    this.referredByContactId,
-    this.referredByContactName,
-    this.referredByContactPhone,
-    this.professionalType,
-    this.professionalName,
-    this.professionalPhone,
-    this.professionalAddress,
-    this.professionalLatitude,
-    this.professionalLongitude,
-    this.isCampaignTarget = false,
-    this.campaignStaffId,
-    this.addedBy,
-    this.createdByUserId,
-    this.stage,
-    this.followupAssignedTo,
-    this.followupAssignedUserId,
-    this.followupDueDate,
-    this.updatedAt,
+    this.referredById,
+    this.referredBy,
     this.leadSourceId,
-    this.assignedToName,
+    this.leadSource,
+    this.assignedTo,
+    this.assignedEmployee,
+    this.createdBy,
+    this.createdByEmployee,
+    this.updatedAt,
+    this.deletedAt,
+    this.referralsCount = 0,
+    this.isVerified = false,
     this.missingFields = const [],
+    this.currentStage,
+    this.consumerProfile,
+    this.partnerProfile,
+    this.dealerProfile,
+    this.interestedProducts = const [],
+    this.autoFollowupNeeded = false,
+    this.professionType,
+    this.workArea,
+    this.houseStage,
+    this.ownerName,
   });
 
   final int id;
   final String phone;
-  final ContactType contactType;
-
-  /// Consumer, partner or dealer. Drives the type badge on the Contacts tab.
-  final ContactKind kind;
+  final ContactKind contactType;
   final DateTime createdAt;
+
+  /// Account or person name. Optional in the API; use [displayName] for UI.
   final String? name;
-  final String? countryCode;
-
-  /// The lead source's slug (`meta`, `website`, `offline`, ...).
-  final String? source;
-  final String? address;
+  final String? phoneAlt;
   final String? district;
-  final String? panchayath;
-  final String? ward;
-  final String? houseStage;
-  final String? currentTank;
-  final String? waterSource;
-  final String? tankSizeInterest;
-  final String? awarenessLevel;
-  final String? remarks;
-  final String? latitude;
-  final String? longitude;
-  final int? referredByContactId;
-  final String? referredByContactName;
-  final String? referredByContactPhone;
-  final String? professionalType;
-  final String? professionalName;
-  final String? professionalPhone;
-  final String? professionalAddress;
-  final String? professionalLatitude;
-  final String? professionalLongitude;
-  final bool isCampaignTarget;
-  final String? campaignStaffId;
-  final String? addedBy;
-  final int? createdByUserId;
-  final String? stage;
+  final String? address;
 
-  /// The employee who owns the contact (`assigned_to`), as a string id.
-  final String? followupAssignedTo;
-  final int? followupAssignedUserId;
-  final String? followupDueDate;
-  final DateTime? updatedAt;
+  /// Free-text note.
+  final String? notes;
+
+  final double? latitude;
+  final double? longitude;
+
+  final int? referredById;
+
+  /// Detail only.
+  final ContactSummary? referredBy;
+
   final int? leadSourceId;
-  final String? assignedToName;
+  final LeadSourceRef? leadSource;
 
-  /// What the API still wants before this contact counts as verified
-  /// (`district`, `house_stage`, `lead_source`, ...). Empty when verified.
+  /// The employee who owns the lead now. Null while unassigned.
+  final int? assignedTo;
+
+  /// Detail: full employee. List: `{id, name}` only.
+  final EmployeeRef? assignedEmployee;
+
+  /// The employee who entered the contact.
+  final int? createdBy;
+  final EmployeeRef? createdByEmployee;
+
+  final DateTime? updatedAt;
+
+  /// Always null for live contacts (deleted ones are not returned).
+  final DateTime? deletedAt;
+
+  /// Detail only: how many contacts this one referred.
+  final int referralsCount;
+
+  /// Computed by the API. True when [missingFields] is empty.
+  final bool isVerified;
+
+  /// What the API still needs before this contact counts as verified
+  /// (`name`, `district`, `house_stage`, `location`, ...).
   final List<String> missingFields;
 
-  bool get isVerified => missingFields.isEmpty;
+  final LeadStageInfo? currentStage;
+
+  final ConsumerProfile? consumerProfile;
+  final PartnerProfile? partnerProfile;
+  final DealerProfile? dealerProfile;
+
+  /// Detail only.
+  final List<ProductRef> interestedProducts;
+
+  /// Detail, create and update only: true when the web should ask for the
+  /// first follow-up (the creator is an admin or manager).
+  final bool autoFollowupNeeded;
+
+  /// Headline fields. The list sends them at the top level; the detail fills
+  /// them from [partnerProfile], [consumerProfile] and [dealerProfile].
+  final String? professionType;
+  final String? workArea;
+  final String? houseStage;
+  final String? ownerName;
 
   String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
 
-  double? get lat => asDouble(latitude);
-  double? get lng => asDouble(longitude);
-  bool get hasLocation => lat != null && lng != null;
+  bool get hasLocation => latitude != null && longitude != null;
 
-  /// The referral source shown on the detail screen, whichever path was used.
+  /// The referral source shown on the detail screen.
   String? get referralSummary {
-    if (professionalName != null || professionalPhone != null) {
-      final type = professionalType ?? 'Professional';
-      return '$type · ${professionalName ?? professionalPhone}';
-    }
-    if (referredByContactName != null) {
-      return 'Contact · $referredByContactName';
+    final referrer = referredBy;
+    if (referrer != null) {
+      return 'Contact · ${referrer.displayName}';
     }
     return null;
   }
 
   factory Contact.fromJson(Map<String, dynamic> json) {
-    final profile = _map(json['consumer_profile']);
-    final stage = _map(json['lead_stage'] ?? json['current_stage']);
-    final source = _map(json['lead_source']);
-    final referrer = _map(json['referred_by']);
+    final consumer = ConsumerProfile.fromJson(json['consumer_profile']);
+    final partner = PartnerProfile.fromJson(json['partner_profile']);
+    final dealer = DealerProfile.fromJson(json['dealer_profile']);
+
+    // `assigned_to` is an int in the detail and {id, name} in the list.
     final assigned = json['assigned_to'];
-    final assignedEmployee = _map(
-      assigned is Map ? assigned : json['assigned_employee'],
-    );
+    // `created_by` is an int in the detail and {id, name} in the list.
     final creator = json['created_by'];
-    final awarenessMode =
-        asInt(json['awareness_mode']) ?? asInt(profile['awareness_mode']);
-    final assignedId = assigned is Map
-        ? asInt(assigned['id'])
-        : asInt(assigned) ?? asInt(assignedEmployee['id']);
-    final createdBy = creator is Map ? asInt(creator['id']) : asInt(creator);
+    final creatorRef = EmployeeRef.fromJson(creator);
+    final creatorBranch = asText(json['created_by_branch']);
+    final creatorEmployee = creatorRef == null
+        ? null
+        : EmployeeRef(
+            id: creatorRef.id,
+            name: creatorRef.name,
+            email: creatorRef.email,
+            role: creatorRef.role,
+            phone: creatorRef.phone,
+            branch: creatorRef.branch ?? creatorBranch,
+          );
 
     return Contact(
       id: asInt(json['id']) ?? 0,
-      phone: asText(json['phone']) ?? '',
-      contactType: awarenessMode == 1
-          ? ContactType.awareness
-          : ContactType.lead,
-      kind: ContactKind.fromId(asText(json['contact_type'])),
-      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
+      contactType: ContactKind.fromId(asText(json['contact_type'])),
       name: asText(json['name']),
-      source: asText(source['slug']),
-      leadSourceId: asInt(source['id']) ?? asInt(json['lead_source_id']),
-      address: asText(json['address']),
+      phone: asText(json['phone']) ?? '',
+      phoneAlt: asText(json['phone_alt']),
       district: asText(json['district']),
-      houseStage: asText(profile['house_stage']),
-      currentTank: asText(profile['current_tank_type']),
-      latitude: asText(json['latitude']),
-      longitude: asText(json['longitude']),
-      referredByContactId:
-          asInt(referrer['id']) ?? asInt(json['referred_by_id']),
-      referredByContactName: asText(referrer['name']),
-      referredByContactPhone: asText(referrer['phone']),
-      addedBy: createdBy?.toString(),
-      createdByUserId: createdBy,
-      stage: asText(stage['stage']),
-      followupAssignedTo: assignedId?.toString(),
-      followupAssignedUserId: assignedId,
-      assignedToName: asText(assignedEmployee['name']),
+      address: asText(json['address']),
+      notes: asText(json['notes']),
+      latitude: asDouble(json['latitude']),
+      longitude: asDouble(json['longitude']),
+      referredById: asInt(json['referred_by_id']),
+      referredBy: ContactSummary.fromJson(json['referred_by']),
+      leadSourceId:
+          asInt(json['lead_source_id']) ??
+          LeadSourceRef.fromJson(json['lead_source'])?.id,
+      leadSource: LeadSourceRef.fromJson(json['lead_source']),
+      assignedTo: assigned is Map ? asInt(assigned['id']) : asInt(assigned),
+      assignedEmployee:
+          EmployeeRef.fromJson(json['assigned_employee']) ??
+          EmployeeRef.fromJson(assigned),
+      createdBy: creator is Map ? asInt(creator['id']) : asInt(creator),
+      createdByEmployee: creatorEmployee,
+      createdAt: parseDate(json['created_at']) ?? DateTime.now(),
       updatedAt: parseDate(json['updated_at']),
+      deletedAt: parseDate(json['deleted_at']),
+      referralsCount: asInt(json['referrals_count']) ?? 0,
+      isVerified: json['is_verified'] == true,
       missingFields: [
         for (final field in (json['missing_fields'] as List?) ?? const [])
           field.toString(),
       ],
+      // The list sends `lead_stage`; the detail sends `current_stage`.
+      currentStage: LeadStageInfo.fromJson(
+        json['current_stage'] ?? json['lead_stage'],
+      ),
+      consumerProfile: consumer,
+      partnerProfile: partner,
+      dealerProfile: dealer,
+      interestedProducts: [
+        for (final item in (json['interested_products'] as List?) ?? const [])
+          ?ProductRef.fromJson(item),
+      ],
+      autoFollowupNeeded: json['auto_followup_needed'] == true,
+      professionType:
+          partner?.professionType ?? asText(json['profession_type']),
+      workArea: partner?.workArea ?? asText(json['work_area']),
+      houseStage: consumer?.houseStage ?? asText(json['house_stage']),
+      ownerName: dealer?.ownerName ?? asText(json['owner_name']),
     );
   }
 
-  /// True when this staff member may edit or delete the record. Admins and
-  /// managers always may; staff may only touch what they created. Legacy
-  /// rows with no creator id belong to nobody and stay read-only for staff.
+  /// Client-side edit rule for the mobile UI. Admins and managers may edit
+  /// any contact. Staff may edit only contacts they created. The backend
+  /// enforces visibility, not this rule.
   bool isEditableBy({required int userId, required bool isPrivileged}) {
     if (isPrivileged) return true;
-    if (createdByUserId != null) return createdByUserId == userId;
-    return addedBy != null && addedBy == userId.toString();
+    return createdBy == userId;
   }
 }
 
-/// Payload for create and update.
+/// Payload for `POST /contacts` (`ContactCreate`) and `PUT /contacts/{id}`
+/// (`ContactUpdate`). The form fills this in; [toApiJson] turns it into the
+/// request body.
 class ContactDraft {
   ContactDraft({
     this.name,
     required this.phone,
+    this.phoneAlt,
     this.source,
-    this.address,
     this.district,
-    this.panchayath,
-    this.ward,
+    this.address,
+    this.notes,
+    this.contactType = ContactKind.consumer,
     this.houseStage,
     this.currentTank,
-    this.waterSource,
-    this.tankSizeInterest,
-    this.contactType = ContactType.lead,
-    this.awarenessLevel,
-    this.remarks,
+    this.tankCapacity,
+    this.tankAge,
+    this.professionType,
+    this.workArea,
+    this.ownerName,
+    this.email,
     this.latitude,
     this.longitude,
     this.referredByContactId,
-    this.professionalType,
-    this.professionalName,
-    this.professionalPhone,
-    this.professionalAddress,
-    this.professionalLatitude,
-    this.professionalLongitude,
-    this.isCampaignTarget = false,
-    this.campaignStaffId,
+    this.assignedTo,
+    this.interestedProductIds,
   });
 
   String? name;
   String phone;
+  String? phoneAlt;
+
+  /// The lead source slug (`meta`, `offline`, ...). The service resolves it to
+  /// `lead_source_id` before sending.
   String? source;
-  String? address;
   String? district;
-  String? panchayath;
-  String? ward;
+  String? address;
+  String? notes;
+  ContactKind contactType;
+
+  // Consumer fields
   String? houseStage;
   String? currentTank;
-  String? waterSource;
-  String? tankSizeInterest;
-  ContactType contactType;
-  String? awarenessLevel;
-  String? remarks;
+  int? tankCapacity;
+  int? tankAge;
+
+  // Partner fields
+  String? professionType;
+  String? workArea;
+
+  // Dealer fields
+  String? ownerName;
+  String? email;
+
+  /// Kept as text because the form edits them as text.
   String? latitude;
   String? longitude;
+
   int? referredByContactId;
-  String? professionalType;
-  String? professionalName;
-  String? professionalPhone;
-  String? professionalAddress;
-  String? professionalLatitude;
-  String? professionalLongitude;
-  bool isCampaignTarget;
-  String? campaignStaffId;
+  int? assignedTo;
+
+  /// `null` means "do not send" (keep the existing product on update).
+  /// An empty list clears the product on update; otherwise this contains one id.
+  List<int>? interestedProductIds;
 
   factory ContactDraft.fromContact(Contact contact) {
     return ContactDraft(
       name: contact.name,
       phone: contact.phone,
-      source: contact.source,
-      address: contact.address,
+      phoneAlt: contact.phoneAlt,
+      source: contact.leadSource?.slug,
       district: contact.district,
-      panchayath: contact.panchayath,
-      ward: contact.ward,
-      houseStage: contact.houseStage,
-      currentTank: contact.currentTank,
-      waterSource: contact.waterSource,
-      tankSizeInterest: contact.tankSizeInterest,
+      address: contact.address,
+      notes: contact.notes,
       contactType: contact.contactType,
-      awarenessLevel: contact.awarenessLevel,
-      remarks: contact.remarks,
-      latitude: contact.latitude,
-      longitude: contact.longitude,
-      referredByContactId: contact.referredByContactId,
-      professionalType: contact.professionalType,
-      professionalName: contact.professionalName,
-      professionalPhone: contact.professionalPhone,
-      professionalAddress: contact.professionalAddress,
-      professionalLatitude: contact.professionalLatitude,
-      professionalLongitude: contact.professionalLongitude,
-      isCampaignTarget: contact.isCampaignTarget,
-      campaignStaffId: contact.campaignStaffId,
+      houseStage: contact.consumerProfile?.houseStage,
+      currentTank: contact.consumerProfile?.currentTankType,
+      tankCapacity: contact.consumerProfile?.currentTankCapacity,
+      tankAge: contact.consumerProfile?.currentTankAge,
+      professionType: contact.partnerProfile?.professionType,
+      workArea: contact.partnerProfile?.workArea,
+      ownerName: contact.dealerProfile?.ownerName,
+      email: contact.dealerProfile?.email,
+      latitude: contact.latitude?.toString(),
+      longitude: contact.longitude?.toString(),
+      referredByContactId: contact.referredById,
+      assignedTo: contact.assignedTo,
+      interestedProductIds: [for (final p in contact.interestedProducts) p.id],
     );
   }
 
-  /// The `POST /contacts` / `PUT /contacts/{id}` body.
+  /// The request body for create or update.
   ///
-  /// [leadSourceId] is resolved by the service from the source slug. Only
-  /// non-blank fields are sent, so an edit never blanks a column the form did
-  /// not touch. Coordinates travel only with the Offline source: the API
-  /// requires them there and rejects them anywhere else.
+  /// [leadSourceId] is resolved by the service from [source]. Only non-blank
+  /// fields are sent, so an edit never blanks a field the form did not touch.
+  /// Coordinates are sent only with the Offline source (`offline: true`),
+  /// because the backend rejects them for any other source.
+  /// Only the profile block for [contactType] is sent.
   Map<String, dynamic> toApiJson({int? leadSourceId, bool offline = false}) {
     final trimmedName = (name ?? '').trim();
     final json = <String, dynamic>{
-      'contact_type': 'consumer',
+      'contact_type': contactType.id,
       'phone': phone.trim(),
       // The API requires a name; fall back to the phone number so a quick
       // capture is still saved and findable.
@@ -362,10 +652,13 @@ class ContactDraft {
       json[key] = value is String ? value.trim() : value;
     }
 
+    put('phone_alt', phoneAlt);
     put('district', district);
     put('address', address);
+    put('notes', notes);
     put('lead_source_id', leadSourceId);
     put('referred_by_id', referredByContactId);
+    put('assigned_to', assignedTo);
     if (offline) {
       final lat = double.tryParse((latitude ?? '').trim());
       final lng = double.tryParse((longitude ?? '').trim());
@@ -374,22 +667,47 @@ class ContactDraft {
         json['longitude'] = lng;
       }
     }
-    json['consumer_profile'] = {
-      'awareness_mode': contactType.awarenessMode,
-      if ((houseStage ?? '').trim().isNotEmpty)
-        'house_stage': houseStage!.trim(),
-      if ((currentTank ?? '').trim().isNotEmpty)
-        'current_tank_type': currentTank!.trim(),
-    };
+    if (interestedProductIds != null) {
+      json['interested_product_ids'] = interestedProductIds;
+    }
+
+    switch (contactType) {
+      case ContactKind.consumer:
+        final profile = <String, dynamic>{};
+        _putText(profile, 'house_stage', houseStage);
+        _putText(profile, 'current_tank_type', currentTank);
+        if (tankCapacity != null) {
+          profile['current_tank_capacity'] = tankCapacity;
+        }
+        if (tankAge != null) profile['current_tank_age'] = tankAge;
+        if (profile.isNotEmpty) json['consumer_profile'] = profile;
+      case ContactKind.partner:
+        final profile = <String, dynamic>{};
+        _putText(profile, 'profession_type', professionType);
+        _putText(profile, 'work_area', workArea);
+        json['partner_profile'] = profile;
+      case ContactKind.dealer:
+        final profile = <String, dynamic>{};
+        _putText(profile, 'owner_name', ownerName);
+        _putText(profile, 'email', email);
+        json['dealer_profile'] = profile;
+    }
     return json;
   }
 }
 
-Map<String, dynamic> _map(dynamic value) =>
-    value is Map<String, dynamic> ? value : const {};
+/// Adds [value] under [key] when it is not blank.
+void _putText(Map<String, dynamic> target, String key, String? value) {
+  final trimmed = (value ?? '').trim();
+  if (trimmed.isNotEmpty) target[key] = trimmed;
+}
 
-/// One page of the contacts list. The API pages by `skip`/`limit`; this keeps
-/// the page arithmetic in one place for the view model.
+/// Returns [value] as a JSON object, or null when it is not one.
+Map<String, dynamic>? _asMap(dynamic value) =>
+    value is Map<String, dynamic> ? value : null;
+
+/// One page of the contacts list (`ContactListResponse`). The API pages by
+/// `skip`/`limit`; this keeps the page arithmetic in one place for the view model.
 class ContactPage {
   const ContactPage({
     required this.contacts,
@@ -416,49 +734,6 @@ class ContactPage {
       total: total,
       page: skip ~/ limit + 1,
       totalPages: total == 0 ? 1 : (total + limit - 1) ~/ limit,
-    );
-  }
-}
-
-/// The trimmed shape returned by `GET /contacts/map`.
-class ContactPin {
-  const ContactPin({
-    required this.id,
-    required this.phone,
-    required this.latitude,
-    required this.longitude,
-    required this.contactType,
-    this.name,
-    this.stage,
-    this.address,
-  });
-
-  final int id;
-  final String phone;
-  final double latitude;
-  final double longitude;
-  final ContactType contactType;
-  final String? name;
-  final String? stage;
-  final String? address;
-
-  String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
-
-  static ContactPin? fromJson(Map<String, dynamic> json) {
-    final lat = asDouble(json['latitude']);
-    final lng = asDouble(json['longitude']);
-    if (lat == null || lng == null) return null;
-    return ContactPin(
-      id: asInt(json['id']) ?? 0,
-      phone: asText(json['phone']) ?? '',
-      latitude: lat,
-      longitude: lng,
-      contactType: asInt(json['awareness_mode']) == 1
-          ? ContactType.awareness
-          : ContactType.lead,
-      name: asText(json['name']),
-      stage: asText(json['stage']),
-      address: asText(json['address']),
     );
   }
 }
