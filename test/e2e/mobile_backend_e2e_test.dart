@@ -5,7 +5,6 @@ import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/core/utils/formatters.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
 import 'package:ogera_crm_mobile/models/contact.dart';
-import 'package:ogera_crm_mobile/models/professional.dart';
 import 'package:ogera_crm_mobile/services/auth_service.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 import 'package:ogera_crm_mobile/view_models/contacts_view_model.dart';
@@ -45,7 +44,6 @@ class _Phone {
 
   AuthUser get user => session.user;
   ContactsService get contacts => ContactsService(api);
-  ProfessionalsService get professionals => ProfessionalsService(api);
   FollowupsService get followups => FollowupsService(api);
   StaffDirectoryService get staff => StaffDirectoryService(api);
 }
@@ -335,84 +333,6 @@ void main() {
     });
   });
 
-  group('professionals', () {
-    test('create, list by trade, edit, delete', () async {
-      final created = await admin.professionals.create(
-        ProfessionalDraft(
-          name: 'Joy Plumber',
-          phone: '9847000001',
-          type: ProfessionalType.plumber,
-          place: 'Feroke',
-          address: 'Beach Road',
-          district: 'Kozhikode',
-          latitude: '11.18',
-          longitude: '75.84',
-        ),
-      );
-      expect(created.type, ProfessionalType.plumber);
-      expect(created.place, 'Feroke');
-      expect(created.hasLocation, isTrue);
-
-      await admin.professionals.create(
-        ProfessionalDraft(
-          name: 'Ravi Engineer',
-          phone: '9847000002',
-          type: ProfessionalType.engineer,
-          address: 'MG Road',
-          district: 'Kannur',
-        ),
-      );
-
-      final plumbers = await admin.professionals.list(
-        type: ProfessionalType.plumber,
-      );
-      expect(plumbers.map((p) => p.name), contains('Joy Plumber'));
-      expect(plumbers.map((p) => p.name), isNot(contains('Ravi Engineer')));
-
-      final everyone = await admin.professionals.list(query: 'ravi');
-      expect(everyone.map((p) => p.name), ['Ravi Engineer']);
-
-      final edited = await admin.professionals.update(
-        created.id,
-        ProfessionalDraft.fromProfessional(created)..place = 'Calicut Beach',
-      );
-      expect(edited.place, 'Calicut Beach');
-      expect(
-        (await admin.professionals.detail(created.id)).place,
-        'Calicut Beach',
-      );
-
-      await admin.professionals.delete(created.id);
-      final remaining = await admin.professionals.list();
-      expect(remaining.map((p) => p.id), isNot(contains(created.id)));
-    });
-
-    test('a professional can be the referrer of a contact', () async {
-      final partner = await admin.professionals.create(
-        ProfessionalDraft(
-          name: 'Kumar Architect',
-          phone: '9847000003',
-          type: ProfessionalType.architect,
-          address: 'Town',
-          district: 'Kannur',
-        ),
-      );
-      final contact = await admin.contacts.create(
-        ContactDraft(
-          name: 'Via Kumar',
-          phone: '9876544444',
-          source: 'meta',
-          district: 'Kannur',
-          address: 'Road',
-          referredByContactId: partner.id,
-        ),
-      );
-      expect(
-        (await admin.contacts.detail(contact.id)).referredBy?.displayName,
-        'Kumar Architect',
-      );
-    });
-  });
 
   group('follow-ups', () {
     late Contact lead;

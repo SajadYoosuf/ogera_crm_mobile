@@ -17,6 +17,10 @@
         android:label="Ogera CRM"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- firebase_messaging 17 requires Installation ID generation to be enabled. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

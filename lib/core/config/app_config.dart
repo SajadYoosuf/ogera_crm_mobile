@@ -12,12 +12,13 @@ class AppConfig {
   static const _override = String.fromEnvironment('API_BASE_URL');
   // Set the deployed FastAPI address at build time:
   //   flutter build apk --dart-define=API_BASE_URL=https://api.example.com
-  static const _productionUrl = 'https://ogera-crm.onrender.com';
+  static const _productionUrl = 'https://ogera-crm-backend.vercel.app';
+  static const _debugUrl = 'https://ogera-crm-backend.vercel.app';
 
   // Local dev server (`uvicorn main:app --host 0.0.0.0 --port 8000`):
   // - Android Emulator: http://10.0.2.2:8000
   // - Physical device on the same LAN: http://<your PC's address>:8000
-  static const _debugUrl = 'http://localhost:8000';
+  // static const _debugUrl = 'http://localhost:8000';
 
   static String get apiBaseUrl {
     if (_override.isNotEmpty) return _override;

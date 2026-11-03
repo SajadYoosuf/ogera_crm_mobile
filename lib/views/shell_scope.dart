@@ -6,13 +6,11 @@ import '../view_models/contacts_view_model.dart';
 import '../view_models/expense_view_model.dart';
 import '../view_models/followups_view_model.dart';
 import '../view_models/home_view_model.dart';
-import '../view_models/professionals_view_model.dart';
-
 /// Carries the shell's module view models onto a pushed route or a sheet.
 ///
-/// The shell provides Contacts, Professionals, Follow-ups, Home and Expenses
-/// below the app's Navigator, but a pushed route or a bottom sheet is built *by*
-/// that Navigator — so it is a sibling of the shell, not a descendant, and
+/// The shell provides Contacts, Follow-ups, Home and Expenses below the app's
+/// Navigator, but a pushed route or a bottom sheet is built *by* that
+/// Navigator — so it is a sibling of the shell, not a descendant, and
 /// inherits none of them. Every detail, form and sheet that writes back into
 /// one of those lists goes through the helpers below.
 Future<T?> pushShellRoute<T>(BuildContext context, WidgetBuilder builder) {
@@ -38,15 +36,12 @@ Future<T?> showShellSheet<T>(BuildContext context, WidgetBuilder builder) {
 /// Missing models are skipped, so a caller outside the shell still works.
 List<SingleChildWidget> _shellProviders(BuildContext context) {
   final contacts = _maybeRead<ContactsViewModel>(context);
-  final professionals = _maybeRead<ProfessionalsViewModel>(context);
   final followups = _maybeRead<FollowupsViewModel>(context);
   final home = _maybeRead<HomeViewModel>(context);
   final expenses = _maybeRead<ExpenseViewModel>(context);
 
   return [
     if (contacts != null) ChangeNotifierProvider.value(value: contacts),
-    if (professionals != null)
-      ChangeNotifierProvider.value(value: professionals),
     if (followups != null) ChangeNotifierProvider.value(value: followups),
     if (home != null) ChangeNotifierProvider.value(value: home),
     if (expenses != null) ChangeNotifierProvider.value(value: expenses),

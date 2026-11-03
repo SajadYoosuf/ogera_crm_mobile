@@ -212,7 +212,6 @@ Future<Widget> _shellHarness({required UserRole role}) async {
       // PipelineService, and NotificationService inside its own MultiProvider.
       Provider<ApiClient>.value(value: api),
       Provider<ContactsService>(create: (_) => ContactsService(api)),
-      Provider<ProfessionalsService>(create: (_) => ProfessionalsService(api)),
       Provider<FollowupsService>(create: (_) => FollowupsService(api)),
       Provider<StaffDirectoryService>(
         create: (_) => StaffDirectoryService(api),

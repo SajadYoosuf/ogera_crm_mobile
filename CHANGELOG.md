@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-11-03 — (branch `mobile-version1`)
+
+**refactor(mobile): remove Professionals module — Phase 1 of MVVM rearchitecture**
+
+Author: sajad yoosuf
+
+### Why
+The Professionals (partner-contacts) module was removed from the mobile MVP scope. It was the only module not in the agreed set (Home, Contacts, Follow-ups, Tasks, Pipeline, Expenses, Products, Profile, Sales). Removing it before adding new features keeps the codebase smaller and easier to understand.
+
+### What was removed
+
+| Status | File | Reason |
+| --- | --- | --- |
+| Deleted | `lib/views/professionals/professionals_tab.dart` | UI for professionals list — not needed for MVP |
+| Deleted | `lib/views/professionals/professional_form_screen.dart` | Create/edit form for professionals |
+| Deleted | `lib/view_models/professionals_view_model.dart` | State management (200 lines) |
+| Deleted | `lib/models/professional.dart` | `Professional`, `ProfessionalDraft`, `ProfessionalType` models |
+| Deleted | `test/professionals_widget_test.dart` | Widget tests for removed screen |
+| Deleted | `test/professionals_view_model_test.dart` | Unit tests for removed view model |
+
+### What was simplified
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modified | `lib/services/crm_services.dart` | Removed `ProfessionalsService` class (41 lines) |
+| Modified | `lib/main.dart` | Removed `ProfessionalsService` ProxyProvider |
+| Modified | `lib/views/shell_screen.dart` | Removed professionals provider, imports, and `openProfessionalForm` function |
+| Modified | `lib/views/shell_scope.dart` | Removed `ProfessionalsViewModel` from the shell provider list |
+| Modified | `lib/views/contacts/referral_picker_sheet.dart` | Rewritten: removed professional tab, now searches contacts only. `ReferralChoice` simplified to hold a single `Contact` |
+| Modified | `lib/views/contacts/add_contact_sheet.dart` | `referredByContactId` simplified to `_referral?.contact.id` |
+| Modified | `test/crm_services_test.dart` | Removed `ProfessionalsService` test group |
+| Modified | `test/shell_screen_test.dart` | Removed `ProfessionalsService` provider from harness |
+| Modified | `test/e2e/mobile_backend_e2e_test.dart` | Removed professionals group and `_Phone.professionals` getter |
+
+### Notes
+- `flutter analyze`: 0 issues after removal.
+- Referral picker still works: it searches all contacts (consumer + partner contact types) using the existing `/contacts` endpoint. A professional partner contact stored in the backend can still be selected as a referrer — the UI tab for managing professionals is what was removed.
+- Pre-existing pending changes in this commit: `API_CONNECTION.md` (backend URL updated from Render to Vercel), `AndroidManifest.xml`, `app_config.dart`, `home_service.dart`, `followups_view_model.dart`, `pipeline_view_model.dart`, `session_view_model.dart` (carried forward from previous work session).
+
+---
+
 ## 2026-10-23 — `c1e94b5` (branch `version1`)
 
 **test(mobile/login): full unit, widget, and integration test suite for login screen**

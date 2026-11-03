@@ -281,9 +281,7 @@ class _AddContactSheetState extends State<AddContactSheet> {
       latitude: _latitude,
       longitude: _longitude,
       source: _selectedSource,
-      // A professional is a partner contact, so both referral kinds are sent by id.
-      referredByContactId:
-          _referral?.contact?.id ?? _referral?.professional?.id,
+      referredByContactId: _referral?.contact.id,
       // Consumer
       houseStage: _type == ContactKind.consumer ? _houseStage : null,
       currentTank: _type == ContactKind.consumer ? _tankType : null,

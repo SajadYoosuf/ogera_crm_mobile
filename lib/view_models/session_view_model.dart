@@ -44,11 +44,10 @@ class SessionViewModel extends ChangeNotifier {
 
   Future<void> bootstrap() async {
     // Run session restore and the minimum splash hold in parallel.
-    // The splash stays visible until both finish, so fast restores still
-    // show the screen for at least 3 seconds.
+    // Keep the splash visible briefly while secure storage restores the session.
     final results = await Future.wait([
       _auth.restore(),
-      Future<void>.delayed(const Duration(seconds: 3)),
+      Future<void>.delayed(const Duration(milliseconds: 700)),
     ]);
     final restored = results[0] as AuthSession?;
     if (restored == null) {

@@ -52,6 +52,7 @@ class PipelineViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   FailureKind? _errorKind;
+  int _latestLoad = 0;
 
   PipelineContactType _activeType = PipelineContactType.consumer;
 
@@ -94,6 +95,7 @@ class PipelineViewModel extends ChangeNotifier {
 
   /// Initial load and pull-to-refresh.
   Future<void> load() async {
+    final request = ++_latestLoad;
     _isLoading = true;
     _error = null;
     _errorKind = null;
@@ -105,6 +107,7 @@ class PipelineViewModel extends ChangeNotifier {
         _service.stages(typeValue),
         _service.contacts(typeValue),
       ]);
+      if (request != _latestLoad) return;
       _stages = results[0] as List<PipelineStageModel>;
       _contacts = results[1] as List<PipelineContact>;
       // Keep selected stage valid after reload.
@@ -115,12 +118,15 @@ class PipelineViewModel extends ChangeNotifier {
         );
       }
     } catch (e) {
+      if (request != _latestLoad) return;
       final failure = describeFailure(e);
       _error = failure.message;
       _errorKind = failure.kind;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (request == _latestLoad) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

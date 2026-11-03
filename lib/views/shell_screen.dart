@@ -15,18 +15,15 @@ import '../view_models/followups_view_model.dart';
 import '../view_models/home_view_model.dart';
 import '../view_models/notification_view_model.dart';
 import '../view_models/pipeline_view_model.dart';
-import '../view_models/professionals_view_model.dart';
 import '../view_models/session_view_model.dart';
 import '../view_models/tasks_view_model.dart';
 import 'contacts/add_contact_sheet.dart';
 import 'contacts/contacts_tab.dart';
-import 'professionals/professional_form_screen.dart';
 import 'home/home_tab.dart';
 import 'home/quick_action_sheets.dart';
 import 'more/more_tab.dart';
 import 'pipeline/pipeline_tab.dart';
 import 'tasks/tasks_tab.dart';
-import 'shell_scope.dart';
 
 /// Signed-in shell: bottom bar, a centre-docked quick-action button, and the
 /// module view models the tabs share.
@@ -87,10 +84,6 @@ class _ShellScreenState extends State<ShellScreen>
         ChangeNotifierProvider(
           create: (context) =>
               ContactsViewModel(context.read<ContactsService>()),
-        ),
-        ChangeNotifierProvider(
-          create: (context) =>
-              ProfessionalsViewModel(context.read<ProfessionalsService>()),
         ),
         ChangeNotifierProvider(
           create: (context) => FollowupsViewModel(
@@ -539,14 +532,3 @@ class _FanButton extends StatelessWidget {
   }
 }
 
-/// Shared entry points for the Add contact and Add professional forms.
-/// Each pushes through [pushShellRoute] so the form can write back into the
-/// list it was opened from.
-Future<void> openProfessionalForm(BuildContext context) async {
-  final professionals = context.read<ProfessionalsViewModel>();
-  final created = await pushShellRoute<dynamic>(
-    context,
-    (_) => const ProfessionalFormScreen(),
-  );
-  if (created != null) professionals.refresh();
-}

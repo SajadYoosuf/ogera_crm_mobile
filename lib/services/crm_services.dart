@@ -4,7 +4,6 @@ import '../core/utils/formatters.dart';
 import '../models/contact.dart';
 import '../models/followup.dart';
 import '../models/lead_work.dart';
-import '../models/professional.dart';
 
 /// One file for the record modules. They all talk to the same FastAPI server
 /// with the same bearer token; the services translate between its snake_case
@@ -265,46 +264,6 @@ class ContactsService {
   }
 }
 
-/// Professionals are the API's partner contacts.
-class ProfessionalsService {
-  ProfessionalsService(this._api) : _sources = LeadSourceCatalog.of(_api);
-
-  final ApiClient _api;
-  final LeadSourceCatalog _sources;
-
-  /// Omitting `type` asks for every profession in one go.
-  Future<List<Professional>> list({
-    ProfessionalType? type,
-    String? query,
-  }) async {
-    final rows = await _fetchAll(_api, '/contacts', {
-      'contact_type': 'partner',
-      'profession_type': type?.apiValue,
-      'search': query,
-    });
-    return rows.map(Professional.fromJson).toList(growable: false);
-  }
-
-  Future<Professional> detail(int id) async {
-    final data = await _api.get('/contacts/$id');
-    return Professional.fromJson(asMap(data));
-  }
-
-  Future<Professional> create(ProfessionalDraft draft) async {
-    final data = await _api.post('/contacts', body: await _body(draft));
-    return Professional.fromJson(asMap(data));
-  }
-
-  Future<Professional> update(int id, ProfessionalDraft draft) async {
-    final data = await _api.put('/contacts/$id', body: await _body(draft));
-    return Professional.fromJson(asMap(data));
-  }
-
-  Future<Map<String, dynamic>> _body(ProfessionalDraft draft) async =>
-      draft.toApiJson(offlineSourceId: await _sources.idFor('offline'));
-
-  Future<void> delete(int id) => _api.delete('/contacts/$id');
-}
 
 /// The follow-up board: consumer contacts by pipeline stage, plus the open
 /// follow-up tasks that give each lead its due date.

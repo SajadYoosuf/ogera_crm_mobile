@@ -9,7 +9,7 @@ The app talks to the FastAPI backend in `ogera_crm_backend` (see `API.md` at the
 | Build | Address |
 | --- | --- |
 | `flutter run` (debug) | `http://192.168.29.206:8000` — change it to your PC's address; an Android emulator uses `http://10.0.2.2:8000` |
-| release | `https://ogera-crm.onrender.com` |
+| release | `https://ogera-crm-backend.vercel.app` |
 | any | `--dart-define=API_BASE_URL=https://...` overrides both |
 
 Start a local backend with `uvicorn main:app --host 0.0.0.0 --port 8000` from `ogera_crm_backend`.

@@ -86,7 +86,7 @@ class HomeService {
     final data = asMap(
       await _api.post(
         '/attendance/checkin',
-        body: {'latitude': ?lat, 'longitude': ?lng},
+        body: {'latitude': lat, 'longitude': lng},
       ),
     );
     return AttendanceRecord.fromJson(data);
