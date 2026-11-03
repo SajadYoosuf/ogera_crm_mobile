@@ -18,11 +18,13 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
 import '../core/utils/formatters.dart';
+import '../local_db/tasks_cache.dart';
 import '../services/tasks_service.dart';
 
 /// Status dropdown values. [apiValue] is what GET /tasks expects.
@@ -42,11 +44,14 @@ enum TaskStatusFilter {
 }
 
 class TasksViewModel extends ChangeNotifier {
-  TasksViewModel(this._service);
+  TasksViewModel(this._service, {TasksCache? cache})
+    : _cache = cache ?? TasksCache();
 
   final TasksService _service;
+  final TasksCache _cache;
 
   bool _isLoading = false;
+  bool _isOffline = false;
   String? _error;
   bool _disposed = false;
 
@@ -63,6 +68,8 @@ class TasksViewModel extends ChangeNotifier {
   List<Task> get tasks => List.unmodifiable(_tasks);
   TaskSummary? get summary => _summary;
   bool get isLoading => _isLoading;
+  /// True when the last load fell back to the local cache (no internet).
+  bool get isOffline => _isOffline;
   String? get error => _error;
   DateTime get selectedDate => _selectedDate;
   TaskStatusFilter get statusFilter => _statusFilter;
@@ -86,8 +93,8 @@ class TasksViewModel extends ChangeNotifier {
 
     String? failure;
     ({List<Task> items, int total, TaskSummary summary})? result;
+    final dateStr = isoDate(_selectedDate);
     try {
-      final dateStr = isoDate(_selectedDate);
       result = await _service.list(
         statusFilter: _statusFilter.apiValue,
         priority: _priorityFilter,
@@ -95,6 +102,18 @@ class TasksViewModel extends ChangeNotifier {
         dateTo: dateStr,
         includeOverdue: _statusFilter.isOpen,
       );
+    } on SocketException {
+      // No internet — fall back to the cache for this date.
+      if (request != _latestLoad) return;
+      final cached = await _cache.load(date: dateStr);
+      _tasks
+        ..clear()
+        ..addAll(cached);
+      _isOffline = true;
+      _error = cached.isEmpty ? 'No internet connection.' : null;
+      _isLoading = false;
+      _notify();
+      return;
     } on ApiException catch (e) {
       failure = e.message;
     } catch (_) {
@@ -110,8 +129,16 @@ class TasksViewModel extends ChangeNotifier {
         ..addAll(result.items);
       _summary = result.summary;
       _error = null;
+      _isOffline = false;
+      // Cache the result for offline use — only when showing "all open" tasks
+      // (no status or priority filter active) so the cache represents what the
+      // user expects to see on first load.
+      if (_statusFilter == TaskStatusFilter.all && _priorityFilter == null) {
+        await _cache.save(date: dateStr, tasks: result.items);
+      }
     } else {
       _error = failure;
+      _isOffline = false;
     }
     _isLoading = false;
     _notify();

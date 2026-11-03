@@ -2,6 +2,65 @@
 
 ## 2026-11-03 — (branch `mobile-version1`)
 
+**feat(mobile): add local SQLite offline cache — Phase 3**
+
+Author: sajad yoosuf
+
+### Why
+The app had no offline support: opening any tab without internet showed an error
+and the screen was empty. This phase adds a local SQLite cache so users can still
+browse contacts, tasks, and the pipeline board while offline (field visits, poor
+signal areas).
+
+### What changed
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/local_db/local_database.dart` | SQLite singleton — opens one DB file, creates all cache tables on first run |
+| Added | `lib/local_db/contacts_cache.dart` | Saves/loads the contacts list by type+page; max-age 1 hour |
+| Added | `lib/local_db/tasks_cache.dart` | Saves/loads tasks by date (YYYY-MM-DD); max-age 30 minutes |
+| Added | `lib/local_db/pipeline_cache.dart` | Saves/loads full pipeline contacts by contact-type; max-age 2 hours |
+| Added | `lib/local_db/sales_cache.dart` | Saves/loads the sales list + `pending_sales` queue for offline writes |
+| Modified | `lib/view_models/contacts_view_model.dart` | Saves page-1 to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/tasks_view_model.dart` | Saves today's tasks to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/pipeline_view_model.dart` | Saves pipeline contacts to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/session_view_model.dart` | Calls `LocalDatabase.close()` on sign-out and on 401, so cache is reset between users |
+
+### How the offline pattern works
+
+```
+try {
+  final data = await _service.list(...);   // 1. Try API
+  await _cache.save(data);                 // 2. On success, save to SQLite
+  _items = data;
+  _isOffline = false;
+} on SocketException {                     // 3. No internet
+  _items = await _cache.load();            // 4. Serve stale cache
+  _isOffline = true;                       // 5. UI can show "offline" banner
+}
+```
+
+### Cache table locations
+All tables live in `ogera_cache.db` (separate from the GPS queue `ogera_location_queue.db`):
+- `contacts_cache` — page-keyed (e.g. `consumer|page1`)
+- `tasks_cache` — date-keyed (e.g. `2025-01-15`)
+- `pipeline_cache` — contact-type-keyed (`consumer`, `partner`, `dealer`)
+- `sales_cache` — single row (`list`)
+- `pending_sales` — offline write queue (create / update / delete)
+
+### Notes
+- `sqflite` was already in `pubspec.yaml` (used by the GPS location queue).
+  No new packages added.
+- The existing `location_queue.dart` was **not changed**.
+- Cache is never used when filters or search are active (only clean first-page
+  data is cached, to avoid showing filtered results in an offline context).
+- `LocalDatabase.close()` on sign-out ensures user A's cached data is not
+  visible to user B on the same device.
+- `flutter analyze`: 0 issues.
+
+---
+
+
 **refactor(mobile): split crm_services.dart into focused service files — Phase 2**
 
 Author: sajad yoosuf

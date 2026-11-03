@@ -21,9 +21,12 @@
 /// once. One request is cheaper than N parallel requests.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
+import '../local_db/pipeline_cache.dart';
 import '../services/pipeline_service.dart';
 
 // ─── contact type enum ─────────────────────────────────────────────────────
@@ -43,13 +46,16 @@ enum PipelineContactType {
 // ─── view model ────────────────────────────────────────────────────────────
 
 class PipelineViewModel extends ChangeNotifier {
-  PipelineViewModel(this._service);
+  PipelineViewModel(this._service, {PipelineCache? cache})
+    : _cache = cache ?? PipelineCache();
 
   final PipelineService _service;
+  final PipelineCache _cache;
 
   // ── state ────────────────────────────────────────────────────────────────
 
   bool _isLoading = false;
+  bool _isOffline = false;
   String? _error;
   FailureKind? _errorKind;
   int _latestLoad = 0;
@@ -68,6 +74,8 @@ class PipelineViewModel extends ChangeNotifier {
   // ── getters ──────────────────────────────────────────────────────────────
 
   bool get isLoading => _isLoading;
+  /// True when the last load fell back to the local cache (no internet).
+  bool get isOffline => _isOffline;
   String? get error => _error;
   FailureKind? get errorKind => _errorKind;
   PipelineContactType get activeType => _activeType;
@@ -110,6 +118,7 @@ class PipelineViewModel extends ChangeNotifier {
       if (request != _latestLoad) return;
       _stages = results[0] as List<PipelineStageModel>;
       _contacts = results[1] as List<PipelineContact>;
+      _isOffline = false;
       // Keep selected stage valid after reload.
       if (_selectedStage != null) {
         _selectedStage = _stages.firstWhere(
@@ -117,11 +126,22 @@ class PipelineViewModel extends ChangeNotifier {
           orElse: () => _stages.isNotEmpty ? _stages.first : _selectedStage!,
         );
       }
+      // Cache the contacts so the board works offline next time.
+      await _cache.save(contactType: typeValue, contacts: _contacts);
+    } on SocketException {
+      // No internet — serve the cached contacts so the board is still usable.
+      if (request != _latestLoad) return;
+      final cached = await _cache.load(contactType: _activeType.apiValue);
+      _contacts = cached;
+      _isOffline = true;
+      _error = cached.isEmpty ? 'No internet connection.' : null;
+      _errorKind = cached.isEmpty ? FailureKind.offline : null;
     } catch (e) {
       if (request != _latestLoad) return;
       final failure = describeFailure(e);
       _error = failure.message;
       _errorKind = failure.kind;
+      _isOffline = false;
     } finally {
       if (request == _latestLoad) {
         _isLoading = false;

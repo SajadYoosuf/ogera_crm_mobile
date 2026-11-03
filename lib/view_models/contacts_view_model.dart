@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
 import '../core/reference/crm_options.dart';
+import '../local_db/contacts_cache.dart';
 import '../models/contact.dart';
 import '../services/crm_services.dart';
 
@@ -12,10 +14,18 @@ import '../services/crm_services.dart';
 /// Search is debounced so typing a phone number does not fire ten requests, and
 /// every fetch carries a sequence number: a slow response for an abandoned
 /// query is discarded rather than overwriting fresher results.
+///
+/// OFFLINE SUPPORT:
+///   On a successful fetch the first page is saved to [ContactsCache].
+///   When the API call fails with a SocketException (no internet), the cached
+///   page is shown instead and [isOffline] is set to true so the UI can show
+///   a banner.
 class ContactsViewModel extends ChangeNotifier {
-  ContactsViewModel(this._service);
+  ContactsViewModel(this._service, {ContactsCache? cache})
+    : _cache = cache ?? ContactsCache();
 
   final ContactsService _service;
+  final ContactsCache _cache;
 
   static const _pageSize = 20;
   static const _debounce = Duration(milliseconds: 350);
@@ -26,6 +36,7 @@ class ContactsViewModel extends ChangeNotifier {
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _isOffline = false;
   String? _error;
   String _query = '';
   // The Contacts screen has one tab per type, and Consumer is the first tab.
@@ -42,6 +53,8 @@ class ContactsViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _page < _totalPages;
+  /// True when the last fetch fell back to the local cache (no internet).
+  bool get isOffline => _isOffline;
   String? get error => _error;
   String get query => _query;
   ContactKind? get kind => _kind;
@@ -144,10 +157,36 @@ class ContactsViewModel extends ChangeNotifier {
       _totalPages = result.totalPages;
       _total = result.total;
       _error = null;
+      _isOffline = false;
+
+      // Save the first page to the local cache so we can serve it offline.
+      // Only cache when no search or filter is active (cached results without
+      // context would be confusing to a user who opens the app offline).
+      if (replace && page == 1 && !hasFilters && _query.isEmpty) {
+        await _cache.save(
+          ContactsCache.cacheKey(kind: _kind, page: 1),
+          result.contacts,
+        );
+      }
+
       if (replace) await _loadCounts();
+    } on SocketException {
+      // No internet — serve the cached first page instead.
+      if (sequence != _sequence) return;
+      if (replace) {
+        final cached = await _cache.load(
+          ContactsCache.cacheKey(kind: _kind, page: 1),
+        );
+        _contacts
+          ..clear()
+          ..addAll(cached);
+        _isOffline = true;
+        _error = cached.isEmpty ? 'No internet connection.' : null;
+      }
     } on ApiException catch (error) {
       if (sequence != _sequence) return;
       _error = error.message;
+      _isOffline = false;
       if (replace) _contacts.clear();
     } finally {
       if (sequence == _sequence) {

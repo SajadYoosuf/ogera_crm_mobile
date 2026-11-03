@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../core/network/api_client.dart';
 import '../core/services/firebase_service.dart';
+import '../local_db/local_database.dart';
 import '../models/auth_session.dart';
 import '../services/auth_service.dart';
 
@@ -68,6 +69,9 @@ class SessionViewModel extends ChangeNotifier {
 
   Future<void> signOut() async {
     await _auth.signOut();
+    // Close the offline cache so a new user gets a clean slate.
+    // The next open will reopen the file automatically.
+    unawaited(LocalDatabase.close());
     _session = null;
     _set(SessionStatus.signedOut);
   }
@@ -77,6 +81,7 @@ class SessionViewModel extends ChangeNotifier {
     if (_session == null) return;
     _expiryNotice = 'Your session ended. Please sign in again.';
     unawaited(_auth.signOut());
+    unawaited(LocalDatabase.close());
     _session = null;
     _set(SessionStatus.signedOut);
   }
