@@ -13,7 +13,7 @@ class AppConfig {
   // Set the deployed FastAPI address at build time:
   //   flutter build apk --dart-define=API_BASE_URL=https://api.example.com
   static const _productionUrl = 'https://ogera-crm-backend.vercel.app';
-  static const _debugUrl = 'https://ogera-crm-backend.vercel.app';
+  static const _debugUrl = 'http://127.0.0.1:8000';
 
   // Local dev server (`uvicorn main:app --host 0.0.0.0 --port 8000`):
   // - Android Emulator: http://10.0.2.2:8000
