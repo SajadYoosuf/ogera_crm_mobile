@@ -7,6 +7,7 @@ import '../services/expense_service.dart';
 import '../services/home_service.dart';
 import '../services/notification_service.dart';
 import '../services/pipeline_service.dart';
+import '../services/sales_service.dart';
 import '../services/tasks_service.dart';
 import '../theme/ogera_colors.dart';
 import '../view_models/contacts_view_model.dart';
@@ -15,6 +16,7 @@ import '../view_models/followups_view_model.dart';
 import '../view_models/home_view_model.dart';
 import '../view_models/notification_view_model.dart';
 import '../view_models/pipeline_view_model.dart';
+import '../view_models/sales_view_model.dart';
 import '../view_models/session_view_model.dart';
 import '../view_models/tasks_view_model.dart';
 import 'contacts/add_contact_sheet.dart';
@@ -110,6 +112,10 @@ class _ShellScreenState extends State<ShellScreen>
           create: (context) => NotificationViewModel(
             NotificationService(context.read<ApiClient>()),
           ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) =>
+              SalesViewModel(context.read<SalesService>()),
         ),
       ],
       child: Builder(

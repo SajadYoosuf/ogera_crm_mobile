@@ -2,6 +2,67 @@
 
 ## 2026-11-03 — (branch `mobile-version1`)
 
+**feat(mobile): add Sales module — Phase 5**
+
+Author: sajad yoosuf
+
+### Why
+Sales CRUD already exists on the web backend (routes/sales.py). The mobile app
+needed its own screens so staff can view and record sales in the field.
+
+### What was added
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/models/sale.dart` | `Sale`, `SaleDraft`, `SalePage` — Dart models matching the backend schema |
+| Added | `lib/services/sales_service.dart` | API calls: list, detail, create, update, delete, products |
+| Added | `lib/view_models/sales_view_model.dart` | State: paged list, search/filter, CRUD actions, offline cache + pending queue |
+| Added | `lib/views/sales/sales_tab.dart` | Sales list screen with search, offline banner, edit/delete actions |
+| Added | `lib/views/sales/sale_form_screen.dart` | Create/edit form with product autocomplete and date picker |
+| Modified | `lib/main.dart` | Added `SalesService` ProxyProvider |
+| Modified | `lib/views/shell_screen.dart` | Added `SalesViewModel` to MultiProvider |
+| Modified | `lib/views/more/more_tab.dart` | Added "Sales register" menu entry that opens `SalesTab` |
+
+### How Sales offline writes work
+- If the device is offline during create/edit/delete, the action is saved to the
+  `pending_sales` SQLite table.
+- On the next successful `load()`, all pending actions are replayed oldest-first
+  before fetching fresh data.
+- If a pending action is rejected by the server (e.g. deleted id), it is removed
+  from the queue so it does not block future syncs.
+
+### Notes
+- Access: all signed-in users can view sales. Admins and managers can create, edit, and delete.
+- The Sales register is accessible from the More tab → "Sales register".
+- `flutter analyze`: 0 issues.
+
+---
+
+**feat(mobile): live CRM options already wired — Phase 4 (no new code needed)**
+
+Author: sajad yoosuf
+
+### Why
+This phase was planned to replace hardcoded dropdown lists with live API data.
+On investigation, `SettingsOptionsCatalog` in `contacts_service.dart` already
+calls `GET /settings/enums/{category}` with a hardcoded fallback — this is the
+correct pattern.
+
+### What is already live
+- `house_stage` — via `ContactsService.houseStages()`
+- `tank_type` — via `SettingsOptionsCatalog.options('tank_type', fallback: CrmOptions.defaultTankTypes)` in `add_contact_sheet.dart`
+- `activity_type` — via `SettingsOptionsCatalog.options('activity_type', ...)` in `tasks_service.dart`, `lead_work_service.dart`, and `quick_action_sheets.dart`
+- Lead sources — via `ContactsService.leadSourceOptions()` which calls `GET /lead-sources`
+
+### What remains hardcoded (intentional)
+- `CrmOptions.districts` — Kerala districts don't change; no backend endpoint exists for them.
+- `CrmOptions.panchayaths` — Same reason.
+- Suggestion lists (waterSourceSuggestions, tankSizeSuggestions, awarenessLevels) — UI hints, not stored values.
+
+### No files changed in this phase.
+
+---
+
 **feat(mobile): add local SQLite offline cache — Phase 3**
 
 Author: sajad yoosuf
