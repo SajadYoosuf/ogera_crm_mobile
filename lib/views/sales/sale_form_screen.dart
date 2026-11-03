@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/sale.dart';
+import '../../models/product.dart';
+import '../../core/widgets/form_fields.dart';
 import '../../services/products_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/sales_view_model.dart';
@@ -43,11 +45,10 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   bool _isSaving = false;
   bool _isLoadingProducts = true;
   String? _error;
-  List<String> _productSuggestions = const [];
+  List<Product> _products = const [];
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
-  late final TextEditingController _productCtrl;
   late final TextEditingController _addressCtrl;
 
   bool get _isEditing => widget.existing != null;
@@ -72,7 +73,6 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
     _nameCtrl = TextEditingController(text: _draft.name);
     _phoneCtrl = TextEditingController(text: _draft.phone ?? '');
-    _productCtrl = TextEditingController(text: _draft.purchasedProduct ?? '');
     _addressCtrl = TextEditingController(text: _draft.address ?? '');
   }
 
@@ -81,10 +81,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
       final products = await context.read<ProductsService>().list(limit: 200);
       if (!mounted) return;
       setState(() {
-        _productSuggestions = products
-            .map((product) => product.name.trim())
-            .where((name) => name.isNotEmpty)
-            .toList(growable: false);
+        _products = products;
         _isLoadingProducts = false;
       });
     } on Exception {
@@ -96,15 +93,12 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _productCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final suggestions = _productSuggestions;
-
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
       appBar: AppBar(
@@ -163,15 +157,34 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
             ),
 
             // Product purchased — dropdown from past sales
-            _Field(
+            OgeraPickerField(
               label: 'Product purchased',
-              child: _ProductField(
-                controller: _productCtrl,
-                suggestions: suggestions,
-                enabled: !_isLoadingProducts,
-                onChanged: (value) => _draft.purchasedProduct =
-                    value.trim().isEmpty ? null : value.trim(),
-              ),
+              icon: Icons.inventory_2_outlined,
+              value: _draft.purchasedProduct,
+              placeholder: _isLoadingProducts
+                  ? 'Loading products…'
+                  : _products.isEmpty
+                      ? 'No products available'
+                      : 'Select product',
+              onClear: () => setState(() => _draft.purchasedProduct = null),
+              onTap: () async {
+                if (_isLoadingProducts || _products.isEmpty) return;
+                final picked = await showOptionPicker<Product>(
+                  context,
+                  title: 'Product purchased',
+                  options: _products,
+                  labelOf: (product) => product.name,
+                  selected: _products
+                      .where((product) =>
+                          product.name == _draft.purchasedProduct)
+                      .firstOrNull,
+                  searchable: true,
+                  searchHint: 'Search product',
+                );
+                if (picked != null && mounted) {
+                  setState(() => _draft.purchasedProduct = picked.name.trim());
+                }
+              },
             ),
 
             // Branch
@@ -255,53 +268,6 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
 // ── Shared label + field wrapper ───────────────────────────────────────────
 
-class _ProductField extends StatelessWidget {
-  const _ProductField({
-    required this.controller,
-    required this.suggestions,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final List<String> suggestions;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: controller.text),
-      optionsBuilder: (textEditingValue) {
-        final query = textEditingValue.text.toLowerCase();
-        final availableSuggestions = suggestions;
-        if (query.isEmpty) return availableSuggestions;
-        return availableSuggestions
-            .where(
-              (suggestion) =>
-                  suggestion.toLowerCase().contains(query),
-            )
-            .toList(growable: false);
-      },
-      fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-        return TextFormField(
-          controller: ctrl,
-          focusNode: focus,
-          enabled: enabled,
-          decoration: const InputDecoration(
-            hintText: 'Tank model or product name',
-          ),
-          onChanged: onChanged,
-        );
-      },
-      onSelected: (value) {
-        controller.text = value;
-        onChanged(value);
-      },
-    );
-  }
-}
-
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.child});
 
@@ -377,11 +343,20 @@ class _DatePicker extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(OgeraSpacing.fieldRadius),
       onTap: () async {
+        final today = DateTime.now();
+        final firstDate = DateTime(2000);
+        final initialDate = date == null
+            ? today
+            : date.isBefore(firstDate)
+                ? firstDate
+                : date.isAfter(today)
+                    ? today
+                    : date;
         final picked = await showDatePicker(
           context: context,
-          initialDate: date ?? DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime.now(),
+          initialDate: initialDate,
+          firstDate: firstDate,
+          lastDate: today,
         );
         if (picked != null) {
           onChanged(
