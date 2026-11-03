@@ -214,19 +214,17 @@ void main() {
     test('typeCounts reads /contacts/type-counts for the tab badges', () async {
       final server = FakeServer({
         'GET /contacts/type-counts': (_) => {
-          'all': 9,
+          'all': 8,
           'consumer': 5,
           'partner': 3,
-          'dealer': 1,
         },
       });
 
       final counts = await ContactsService(server.api).typeCounts();
 
-      expect(counts.of(null), 9);
+      expect(counts.of(null), 8);
       expect(counts.of(ContactKind.consumer), 5);
       expect(counts.of(ContactKind.partner), 3);
-      expect(counts.of(ContactKind.dealer), 1);
     });
 
     test(

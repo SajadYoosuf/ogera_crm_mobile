@@ -2,7 +2,7 @@
 ///
 /// ## What the Pipeline tab shows
 /// The user sees contacts bucketed into pipeline stages for one contact type
-/// at a time. They switch between Consumer, Partner and Dealer with chips at
+/// at a time. They switch between Consumer and Partner with chips at
 /// the top. Below that, a horizontal stage strip lets them focus on one stage.
 ///
 /// ## How it works
@@ -31,11 +31,10 @@ import '../services/pipeline_service.dart';
 
 // ─── contact type enum ─────────────────────────────────────────────────────
 
-/// Which of the three contact-type boards is open.
+/// Which of the two contact-type boards is open.
 enum PipelineContactType {
   consumer('Consumer', 'consumer'),
-  partner('Partner', 'partner'),
-  dealer('Dealer', 'dealer');
+  partner('Partner', 'partner');
 
   const PipelineContactType(this.label, this.apiValue);
 

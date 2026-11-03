@@ -3,8 +3,8 @@ import '../core/utils/formatters.dart';
 /// Mobile model for the `/contacts` API.
 ///
 /// Mirrors the backend contract in `ogera_crm_backend/schemas/contact.py`,
-/// `consumer_profile.py`, `partner_profile.py`, `dealer_profile.py`,
-/// `lead_stage.py`, `lead_source.py` and `employee.py`.
+/// `consumer_profile.py`, `partner_profile.py`, `lead_stage.py`,
+/// `lead_source.py` and `employee.py`.
 ///
 /// Two response shapes share one [Contact] class:
 ///   - `GET /contacts` (list row, `ContactListItem`): identity, headline
@@ -22,8 +22,7 @@ import '../core/utils/formatters.dart';
 /// of `contact_type` in every request and response.
 enum ContactKind {
   consumer('consumer', 'Consumer'),
-  partner('partner', 'Partner'),
-  dealer('dealer', 'Dealer');
+  partner('partner', 'Partner');
 
   const ContactKind(this.id, this.label);
 
@@ -34,7 +33,6 @@ enum ContactKind {
   /// default the backend uses.
   static ContactKind fromId(String? value) => switch (value) {
     'partner' => ContactKind.partner,
-    'dealer' => ContactKind.dealer,
     _ => ContactKind.consumer,
   };
 }
@@ -46,7 +44,6 @@ class ContactTypeCounts {
     this.all = 0,
     this.consumer = 0,
     this.partner = 0,
-    this.dealer = 0,
   });
 
   factory ContactTypeCounts.fromJson(Map<String, dynamic> json) {
@@ -54,21 +51,18 @@ class ContactTypeCounts {
       all: asInt(json['all']) ?? 0,
       consumer: asInt(json['consumer']) ?? 0,
       partner: asInt(json['partner']) ?? 0,
-      dealer: asInt(json['dealer']) ?? 0,
     );
   }
 
   final int all;
   final int consumer;
   final int partner;
-  final int dealer;
 
   /// The count for one tab. `null` is the "All Contacts" tab.
   int of(ContactKind? kind) => switch (kind) {
     null => all,
     ContactKind.consumer => consumer,
     ContactKind.partner => partner,
-    ContactKind.dealer => dealer,
   };
 }
 
@@ -304,34 +298,6 @@ class PartnerProfile {
   }
 }
 
-/// Dealer details (`DealerProfileResponse`). Only dealers have one.
-class DealerProfile {
-  const DealerProfile({
-    required this.id,
-    required this.contactId,
-    required this.ownerName,
-    this.email,
-  });
-
-  final int id;
-  final int contactId;
-
-  /// The person at the dealer. The dealer's account name is [Contact.name].
-  final String ownerName;
-  final String? email;
-
-  static DealerProfile? fromJson(dynamic value) {
-    final map = _asMap(value);
-    if (map == null) return null;
-    return DealerProfile(
-      id: asInt(map['id']) ?? 0,
-      contactId: asInt(map['contact_id']) ?? 0,
-      ownerName: asText(map['owner_name']) ?? '',
-      email: asText(map['email']),
-    );
-  }
-}
-
 /// A contact as returned by `GET /contacts` (list row) or
 /// `GET /contacts/{id}`, `POST /contacts`, `PUT /contacts/{id}` (detail).
 /// See the file comment for which fields each shape sends.
@@ -364,13 +330,11 @@ class Contact {
     this.currentStage,
     this.consumerProfile,
     this.partnerProfile,
-    this.dealerProfile,
     this.interestedProducts = const [],
     this.autoFollowupNeeded = false,
     this.professionType,
     this.workArea,
     this.houseStage,
-    this.ownerName,
   });
 
   final int id;
@@ -427,7 +391,6 @@ class Contact {
 
   final ConsumerProfile? consumerProfile;
   final PartnerProfile? partnerProfile;
-  final DealerProfile? dealerProfile;
 
   /// Detail only.
   final List<ProductRef> interestedProducts;
@@ -437,11 +400,10 @@ class Contact {
   final bool autoFollowupNeeded;
 
   /// Headline fields. The list sends them at the top level; the detail fills
-  /// them from [partnerProfile], [consumerProfile] and [dealerProfile].
+  /// them from [partnerProfile] and [consumerProfile].
   final String? professionType;
   final String? workArea;
   final String? houseStage;
-  final String? ownerName;
 
   String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
 
@@ -459,7 +421,6 @@ class Contact {
   factory Contact.fromJson(Map<String, dynamic> json) {
     final consumer = ConsumerProfile.fromJson(json['consumer_profile']);
     final partner = PartnerProfile.fromJson(json['partner_profile']);
-    final dealer = DealerProfile.fromJson(json['dealer_profile']);
 
     // `assigned_to` is an int in the detail and {id, name} in the list.
     final assigned = json['assigned_to'];
@@ -516,7 +477,6 @@ class Contact {
       ),
       consumerProfile: consumer,
       partnerProfile: partner,
-      dealerProfile: dealer,
       interestedProducts: [
         for (final item in (json['interested_products'] as List?) ?? const [])
           ?ProductRef.fromJson(item),
@@ -526,7 +486,6 @@ class Contact {
           partner?.professionType ?? asText(json['profession_type']),
       workArea: partner?.workArea ?? asText(json['work_area']),
       houseStage: consumer?.houseStage ?? asText(json['house_stage']),
-      ownerName: dealer?.ownerName ?? asText(json['owner_name']),
     );
   }
 
@@ -558,8 +517,6 @@ class ContactDraft {
     this.tankAge,
     this.professionType,
     this.workArea,
-    this.ownerName,
-    this.email,
     this.latitude,
     this.longitude,
     this.referredByContactId,
@@ -590,8 +547,6 @@ class ContactDraft {
   String? workArea;
 
   // Dealer fields
-  String? ownerName;
-  String? email;
 
   /// Kept as text because the form edits them as text.
   String? latitude;
@@ -620,8 +575,6 @@ class ContactDraft {
       tankAge: contact.consumerProfile?.currentTankAge,
       professionType: contact.partnerProfile?.professionType,
       workArea: contact.partnerProfile?.workArea,
-      ownerName: contact.dealerProfile?.ownerName,
-      email: contact.dealerProfile?.email,
       latitude: contact.latitude?.toString(),
       longitude: contact.longitude?.toString(),
       referredByContactId: contact.referredById,
@@ -686,11 +639,6 @@ class ContactDraft {
         _putText(profile, 'profession_type', professionType);
         _putText(profile, 'work_area', workArea);
         json['partner_profile'] = profile;
-      case ContactKind.dealer:
-        final profile = <String, dynamic>{};
-        _putText(profile, 'owner_name', ownerName);
-        _putText(profile, 'email', email);
-        json['dealer_profile'] = profile;
     }
     return json;
   }

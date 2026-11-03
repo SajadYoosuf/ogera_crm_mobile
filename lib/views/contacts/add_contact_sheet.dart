@@ -12,7 +12,6 @@
 ///   Consumer  : house stage, tank type, tank capacity, tank age,
 ///               products interested.
 ///   Partner   : partner/profession type, work area.
-///   Dealer    : owner name, email.
 library;
 
 import 'package:flutter/material.dart';
@@ -75,8 +74,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
   final _workAreaController = TextEditingController();
-  final _ownerNameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _tankCapController = TextEditingController();
   final _tankAgeController = TextEditingController();
 
@@ -160,9 +157,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
         ? null
         : humanizeSlug(partner.professionType);
     _workAreaController.text = partner?.workArea ?? '';
-    final dealer = contact.dealerProfile;
-    _ownerNameController.text = dealer?.ownerName ?? '';
-    _emailController.text = dealer?.email ?? '';
   }
 
   @override
@@ -172,8 +166,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
     _addressController.dispose();
     _notesController.dispose();
     _workAreaController.dispose();
-    _ownerNameController.dispose();
-    _emailController.dispose();
     _tankCapController.dispose();
     _tankAgeController.dispose();
     super.dispose();
@@ -302,17 +294,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
                 ? null
                 : _workAreaController.text.trim())
           : null,
-      // Dealer
-      ownerName: _type == ContactKind.dealer
-          ? (_ownerNameController.text.trim().isEmpty
-                ? null
-                : _ownerNameController.text.trim())
-          : null,
-      email: _type == ContactKind.dealer
-          ? (_emailController.text.trim().isEmpty
-                ? null
-                : _emailController.text.trim())
-          : null,
     );
 
     try {
@@ -353,7 +334,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
     // The modal bottom sheet (see showShellSheet) already draws the sheet
     // surface and handles drag-to-close, so this widget only draws its content.
     return Container(
@@ -373,32 +353,38 @@ class _AddContactSheetState extends State<AddContactSheet> {
           Expanded(
             child: Form(
               key: _formKey,
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  OgeraSpacing.screen,
-                  16,
-                  OgeraSpacing.screen,
-                  16 + bottom,
-                ),
-                children: [
-                  if (_loadingOptions)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: LinearProgressIndicator(minHeight: 2),
+              // Builder isolates the MediaQuery.viewInsetsOf dependency so only
+              // the ListView rebuilds as the keyboard animates, not the whole sheet.
+              child: Builder(
+                builder: (ctx) {
+                  final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+                  return ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      OgeraSpacing.screen,
+                      16,
+                      OgeraSpacing.screen,
+                      16 + bottom,
                     ),
-                  _buildIdentitySection(),
-                  _buildLeadInfoSection(),
-                  _buildLocationSection(),
-                  if (_type == ContactKind.consumer) _buildConsumerSection(),
-                  if (_type == ContactKind.partner) _buildPartnerSection(),
-                  if (_type == ContactKind.dealer) _buildDealerSection(),
-                  _buildNotesSection(),
-                  if (_saveError != null) ...[
-                    const SizedBox(height: 8),
-                    _ErrorBanner(message: _saveError!),
-                  ],
-                  const SizedBox(height: 8),
-                ],
+                    children: [
+                      if (_loadingOptions)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      _buildIdentitySection(),
+                      _buildLeadInfoSection(),
+                      _buildLocationSection(),
+                      if (_type == ContactKind.consumer) _buildConsumerSection(),
+                      if (_type == ContactKind.partner) _buildPartnerSection(),
+                      _buildNotesSection(),
+                      if (_saveError != null) ...[
+                        const SizedBox(height: 8),
+                        _ErrorBanner(message: _saveError!),
+                      ],
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -659,43 +645,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
     );
   }
 
-  Widget _buildDealerSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionLabel(
-          title: 'Dealer details',
-          icon: Icons.storefront_outlined,
-        ),
-        OgeraTextField(
-          label: 'Owner name',
-          controller: _ownerNameController,
-          icon: Icons.manage_accounts_outlined,
-          hint: 'Name of the owner',
-          maxLength: 150,
-          textCapitalization: TextCapitalization.words,
-        ),
-        OgeraTextField(
-          label: 'Email',
-          controller: _emailController,
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-          textCapitalization: TextCapitalization.none,
-          maxLength: 150,
-          hint: 'owner@example.com',
-          validator: (v) {
-            final t = (v ?? '').trim();
-            if (t.isEmpty) return null;
-            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(t)) {
-              return 'Enter a valid email address';
-            }
-            return null;
-          },
-        ),
-      ],
-    );
-  }
-
   Widget _buildNotesSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -867,7 +816,6 @@ class _TypeChip extends StatelessWidget {
     final icon = switch (kind) {
       ContactKind.consumer => Icons.home_outlined,
       ContactKind.partner => Icons.handyman_outlined,
-      ContactKind.dealer => Icons.storefront_outlined,
     };
     return GestureDetector(
       onTap: onTap,

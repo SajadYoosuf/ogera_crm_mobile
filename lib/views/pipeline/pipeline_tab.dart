@@ -1,9 +1,9 @@
-/// Pipeline tab — contacts bucketed by stage for each of the three contact
-/// types (Consumer, Partner, Dealer).
+/// Pipeline tab — contacts bucketed by stage for each contact type
+/// (Consumer, Partner).
 ///
 /// ## Layout
 /// 1. AppBar "Pipeline" with a search icon.
-/// 2. Contact-type chips: Consumer · Partner · Dealer.
+/// 2. Contact-type chips: Consumer · Partner.
 ///    Switching triggers a full reload for that type's stages and contacts.
 /// 3. Stage strip: horizontally scrollable chips from `GET /pipeline/stages`.
 ///    Each chip shows the stage name and how many contacts sit in it.

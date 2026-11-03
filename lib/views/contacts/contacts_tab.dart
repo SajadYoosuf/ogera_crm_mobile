@@ -44,7 +44,6 @@ class _ContactsTabState extends State<ContactsTab> {
   static const tabKinds = <ContactKind>[
     ContactKind.consumer,
     ContactKind.partner,
-    ContactKind.dealer,
   ];
 
   final _searchController = TextEditingController();

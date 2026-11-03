@@ -8,7 +8,7 @@
 //   instantly on revisit and still works when the device is offline.
 //
 // HOW THE CACHE KEY WORKS:
-//   The board has three tabs: consumer, partner, dealer. Each tab has its own
+//   The board has two tabs: consumer and partner. Each tab has its own
 //   cache row keyed by contact_type so switching tabs does not clear the others.
 //
 // HOW TO USE (in PipelineViewModel):
@@ -34,7 +34,7 @@ class PipelineCache {
   // 2 hours gives the team a useful offline buffer without serving stale boards.
   static const _maxAge = Duration(hours: 2);
 
-  /// Saves all [contacts] for the given [contactType] ("consumer", "partner", or "dealer").
+  /// Saves all [contacts] for the given [contactType] ("consumer" or "partner").
   Future<void> save({
     required String contactType,
     required List<PipelineContact> contacts,

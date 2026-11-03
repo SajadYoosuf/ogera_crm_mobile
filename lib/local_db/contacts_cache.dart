@@ -157,7 +157,6 @@ class ContactsCache {
       'house_stage': c.houseStage,
       'profession_type': c.professionType,
       'work_area': c.workArea,
-      'owner_name': c.ownerName,
     };
   }
 }

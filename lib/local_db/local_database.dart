@@ -77,8 +77,8 @@ class LocalDatabase {
       )
     ''');
 
-    // pipeline_cache: one row per contact-type board (consumer/partner/dealer).
-    //   contact_type — "consumer", "partner", or "dealer"
+    // pipeline_cache: one row per contact-type board (consumer/partner).
+    //   contact_type — "consumer" or "partner"
     //   data         — JSON array of all Lead objects for that board
     //   saved_at     — ISO-8601 timestamp
     await db.execute('''

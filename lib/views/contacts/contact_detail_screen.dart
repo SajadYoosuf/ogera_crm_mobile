@@ -681,7 +681,6 @@ class _DetailsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final consumer = contact.consumerProfile;
     final partner = contact.partnerProfile;
-    final dealer = contact.dealerProfile;
     final location = contact.hasLocation
         ? '${contact.latitude!.toStringAsFixed(5)}, '
               '${contact.longitude!.toStringAsFixed(5)}'
@@ -728,13 +727,6 @@ class _DetailsSection extends StatelessWidget {
                     : humanizeSlug(partner.professionType),
               ),
               _InfoRow(label: 'Work area', value: partner?.workArea),
-            ],
-          ),
-          ContactKind.dealer => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _InfoRow(label: 'Owner name', value: dealer?.ownerName),
-              _InfoRow(label: 'Email', value: dealer?.email),
             ],
           ),
         },
