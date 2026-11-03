@@ -3,10 +3,11 @@
 // The Sales tab — a searchable, filterable list of past sale records.
 //
 // WHAT IT SHOWS:
-//   - A search bar (name, phone, address or product).
+//   - A search field (name, phone, address or product) in the body.
 //   - A list of sale cards, newest first.
 //   - Tapping a card opens the edit form (admin/manager only see Edit option).
-//   - A FAB to create a new sale (shown only to admins and managers).
+//   - A "+" icon button in the AppBar and a FAB to create a new sale
+//     (both shown only to admins and managers).
 //
 // DATA FLOW:
 //   SalesTab → SalesViewModel → SalesService → GET /sales
@@ -20,6 +21,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/sale.dart';
 import '../../theme/ogera_colors.dart';
@@ -59,45 +61,68 @@ class _SalesTabState extends State<SalesTab> {
   Widget build(BuildContext context) {
     final vm = context.watch<SalesViewModel>();
     final session = context.watch<SessionViewModel>();
+    // All signed-in employees can add and edit their own sales.
+    // Admins and managers can also delete any sale.
     final canWrite = session.user?.isPrivileged ?? false;
-
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
       appBar: AppBar(
+        backgroundColor: OgeraColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: const Text('Sales'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: SearchBar(
-              controller: _searchController,
-              hintText: 'Search by name, phone or product…',
-              leading: const Icon(Icons.search),
-              trailing: [
-                if (_searchController.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      vm.setSearch('');
-                    },
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              OgeraSpacing.screen,
+              12,
+              OgeraSpacing.screen,
+              8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OgeraSearchField(
+                    controller: _searchController,
+                    hint: 'Search by name, phone or product…',
+                    onChanged: vm.setSearch,
+                    onClear: () => vm.setSearch(''),
                   ),
+                ),
+                
+                if (canWrite) ...[
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: () => _openForm(context, vm),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Sale'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: OgeraColors.forest,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                      minimumSize: const Size(0, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(OgeraSpacing.fieldRadius),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-              onChanged: vm.setSearch,
             ),
           ),
-        ),
-      ),
-      floatingActionButton: canWrite
-          ? FloatingActionButton(
-              onPressed: () => _openForm(context, vm),
-              tooltip: 'Add sale',
-              child: const Icon(Icons.add),
-            )
-          : null,
-      body: RefreshIndicator(
-        onRefresh: vm.load,
-        child: _Body(vm: vm, canWrite: canWrite),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: vm.load,
+              child: _Body(vm: vm, canWrite: canWrite),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -116,14 +141,54 @@ class _SalesTabState extends State<SalesTab> {
 
 // ── Body ───────────────────────────────────────────────────────────────────
 
-class _Body extends StatelessWidget {
+// _Body is a StatefulWidget so it can own a ScrollController.
+// We MUST NOT call vm.loadMore() inside the build callback — doing so fires
+// notifyListeners() during the build phase, scheduling another build
+// immediately, which produces an infinite rebuild loop that floods the GPU
+// buffer queue (BLASTBufferQueue errors on Android).
+// Instead we listen to the scroll position and call loadMore() from a
+// scroll listener, which runs outside the build phase.
+class _Body extends StatefulWidget {
   const _Body({required this.vm, required this.canWrite});
 
   final SalesViewModel vm;
   final bool canWrite;
 
   @override
+  State<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends State<_Body> {
+  late final ScrollController _scroll;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll = ScrollController();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final nearBottom =
+        _scroll.position.pixels >= _scroll.position.maxScrollExtent - 200;
+    if (nearBottom && widget.vm.hasMore && !widget.vm.isLoadingMore) {
+      widget.vm.loadMore();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final vm = widget.vm;
+    final canWrite = widget.canWrite;
+
     if (vm.isLoading) {
       return const LoadingListView();
     }
@@ -144,6 +209,7 @@ class _Body extends StatelessWidget {
     }
 
     return CustomScrollView(
+      controller: _scroll,
       slivers: [
         // Offline banner
         if (vm.isOffline)
@@ -152,17 +218,6 @@ class _Body extends StatelessWidget {
         SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              if (index == vm.sales.length) {
-                // Load-more trigger at the end of the list.
-                if (vm.hasMore) {
-                  vm.loadMore();
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return null;
-              }
               final sale = vm.sales[index];
               return _SaleCard(
                 sale: sale,
@@ -182,9 +237,19 @@ class _Body extends StatelessWidget {
                     : null,
               );
             },
-            childCount: vm.sales.length + (vm.hasMore ? 1 : 0),
+            childCount: vm.sales.length,
           ),
         ),
+
+        // Load-more spinner shown below the list while fetching the next page.
+        if (vm.isLoadingMore)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+
         const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
       ],
     );
