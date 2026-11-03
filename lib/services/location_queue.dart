@@ -1,3 +1,38 @@
+// location_queue.dart
+//
+// PURPOSE:
+//   Staff members share their GPS location with the server so managers can see
+//   where everyone is on a live map. The app captures a GPS ping periodically
+//   and sends it via POST /staff/location. When there is no internet, the ping
+//   would normally be lost.
+//
+// HOW THE OFFLINE QUEUE WORKS:
+//   Instead of sending the ping directly, the app always saves it to a tiny
+//   SQLite database on the device first (the "queue"). A background process
+//   then reads from the queue and tries to send it to the server.
+//
+//   Step-by-step:
+//     1. GPS ping captured → saved to `pending_location` table (overwriting any
+//        older unsent ping for this user — we only care about the latest).
+//     2. Background sender runs → calls peek() to read the queued ping.
+//     3. If the POST succeeds → remove() deletes the row so it is not sent twice.
+//     4. If the POST fails (no internet) → the row stays; the next background
+//        run will try again automatically.
+//
+// WHY ONLY ONE ROW PER USER (ConflictAlgorithm.replace):
+//   The table has `owner_id` as its PRIMARY KEY. Inserting a new row for the
+//   same user overwrites the old one instead of adding a second row.
+//   This is intentional: if the device was offline for 30 minutes, sending
+//   thirty stale pings would flood the server with old data. Managers only need
+//   the *current* position, so keeping just the newest point is correct.
+//
+// WHY A SEPARATE DATABASE FILE (ogera_location_queue.db):
+//   The main cache lives in ogera_cache.db and is erased on sign-out so that
+//   user A's data is not visible to user B. Location pings are tied to the
+//   logged-in user via owner_id and must survive a brief sign-out/sign-in
+//   cycle (e.g. token refresh), so they live in their own file that is NOT
+//   cleared on sign-out.
+
 import 'package:sqflite/sqflite.dart';
 
 /// Durable buffer for the newest location that has not reached the server.

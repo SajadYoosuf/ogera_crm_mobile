@@ -32,6 +32,23 @@ class ContactsViewModel extends ChangeNotifier {
 
   final List<Contact> _contacts = [];
   Timer? _debounceTimer;
+  // Sequence counter — prevents a slow API response from overwriting a newer one.
+  //
+  // HOW IT WORKS:
+  // Every call to _fetch() increments _sequence and stores the value in a
+  // local variable called `sequence`. When the API responds (which may take
+  // several seconds), the handler checks: is my local `sequence` still the
+  // latest one? If not, a newer fetch has started and this response is stale —
+  // so we silently discard it instead of replacing the already-fresher list.
+  //
+  // EXAMPLE:
+  //   User types "Jo"  → _sequence becomes 1, fetch #1 starts
+  //   User types "Joh" → _sequence becomes 2, fetch #2 starts
+  //   Fetch #1 returns → sequence(1) != _sequence(2) → DISCARDED ✓
+  //   Fetch #2 returns → sequence(2) == _sequence(2) → APPLIED   ✓
+  //
+  // Without this, a slow network could cause the "Jo" results to arrive after
+  // "Joh" results and overwrite them, leaving the user looking at wrong data.
   int _sequence = 0;
 
   bool _isLoading = true;
