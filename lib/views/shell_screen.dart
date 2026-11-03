@@ -23,14 +23,14 @@ import 'contacts/add_contact_sheet.dart';
 import 'contacts/contacts_tab.dart';
 import 'home/home_tab.dart';
 import 'home/quick_action_sheets.dart';
-import 'more/more_tab.dart';
 import 'pipeline/pipeline_tab.dart';
+import 'sales/sales_tab.dart';
 import 'tasks/tasks_tab.dart';
 
 /// Signed-in shell: bottom bar, a centre-docked quick-action button, and the
 /// module view models the tabs share.
 ///
-/// Tab order: Home · Contacts · Tasks · Pipeline · More.
+/// Tab order: Home · Contacts · Tasks · Pipeline · Sales.
 /// Tasks is a placeholder until Sprint 2; Pipeline is live from Sprint 3.
 ///
 /// The centre button fans out three circle buttons: Add contact, Activity log,
@@ -180,7 +180,12 @@ class _ShellScreenState extends State<ShellScreen>
                             context.read<PipelineViewModel>().load(),
                         child: const PipelineTab(),
                       ),
-                      const MoreTab(),
+                      _LazyTab(
+                        active: _index == 4,
+                        onActivate: () =>
+                            context.read<SalesViewModel>().load(),
+                        child: const SalesTab(),
+                      ),
                     ],
                   ),
                   // Dims the screen while the fan is open; tapping it closes the fan.
@@ -320,9 +325,9 @@ class _NavBar extends StatelessWidget {
               ),
               _item(
                 4,
-                Icons.more_horiz_rounded,
-                Icons.more_horiz_rounded,
-                'More',
+                Icons.point_of_sale_outlined,
+                Icons.point_of_sale_rounded,
+                'Sales',
               ),
             ],
           ),

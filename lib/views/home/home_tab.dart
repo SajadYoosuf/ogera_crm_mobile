@@ -4,8 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
+import '../../view_models/expense_view_model.dart';
 import '../../view_models/home_view_model.dart';
 import '../../view_models/session_view_model.dart';
+import '../more/expenses_screen.dart';
+import '../more/products_screen.dart';
+import '../more/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'checkin_button.dart';
 import 'recent_leads_section.dart';
@@ -135,9 +139,15 @@ class _StaffHome extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
+      drawer: const _HomeDrawer(),
       appBar: AppBar(
         title: const Text('Home'),
-        actions: const [NotificationBellButton(), SizedBox(width: 4)],
+        actions: const [
+          NotificationBellButton(),
+          SizedBox(width: 6),
+          _ProfileAvatarButton(),
+          SizedBox(width: 8),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: home.load,
@@ -168,6 +178,125 @@ class _StaffHome extends StatelessWidget {
             // Tasks section — tasks due in the chosen period
             const SectionHeader(title: 'Tasks', icon: Icons.task_alt_rounded),
             const RecentTasksSection(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AppBar profile avatar — tapping opens ProfileScreen.
+
+class _ProfileAvatarButton extends StatelessWidget {
+  const _ProfileAvatarButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<SessionViewModel>().user;
+    if (user == null) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+      ),
+      child: OgeraAvatar(
+        name: user.name,
+        phone: user.phone,
+        size: 34,
+        color: user.isHead ? OgeraColors.ink : OgeraColors.blue,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Home page drawer — Products and Expenses navigation.
+
+class _HomeDrawer extends StatelessWidget {
+  const _HomeDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<SessionViewModel>().user;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: OgeraColors.surface,
+                border: const Border(
+                  bottom: BorderSide(color: OgeraColors.line),
+                ),
+              ),
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  OgeraAvatar(
+                    name: user?.name ?? '',
+                    phone: user?.phone,
+                    size: 52,
+                    color: (user?.isHead ?? false)
+                        ? OgeraColors.ink
+                        : OgeraColors.blue,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    user?.name ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    user?.role.label ?? '',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: OgeraColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.inventory_2_outlined,
+                color: OgeraColors.blue,
+              ),
+              title: const Text('Products'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProductsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.receipt_long_outlined,
+                color: OgeraColors.warning,
+              ),
+              title: const Text('Expenses'),
+              onTap: () {
+                final expenseVm = context.read<ExpenseViewModel>();
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: expenseVm,
+                      child: const ExpensesScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
