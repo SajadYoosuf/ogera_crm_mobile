@@ -55,9 +55,8 @@ class SalesViewModel extends ChangeNotifier {
   int _total = 0;
   int _totalPages = 1;
   int _currentPage = 1;
+  Future<void>? _loadInFlight;
 
-  /// Suggestions for the product autocomplete, loaded once per session.
-  List<String> _productSuggestions = [];
 
   // ── Getters ──────────────────────────────────────────────────────────────
 
@@ -73,7 +72,6 @@ class SalesViewModel extends ChangeNotifier {
   String? get toDate => _toDate;
   int get total => _total;
   bool get hasMore => _currentPage < _totalPages;
-  List<String> get productSuggestions => List.unmodifiable(_productSuggestions);
 
   bool get hasFilters =>
       _productFilter != null || _fromDate != null || _toDate != null;
@@ -82,6 +80,20 @@ class SalesViewModel extends ChangeNotifier {
 
   /// Initial load and pull-to-refresh. Replays offline queue first, then fetches.
   Future<void> load({bool silent = false}) async {
+    // Multiple lifecycle callbacks can request the same refresh (for example,
+    // a tab activation and a route return). Coalesce them so pending offline
+    // writes are not replayed twice and the list is not rebuilt repeatedly.
+    if (_loadInFlight != null) return _loadInFlight!;
+    final future = _loadInternal(silent: silent);
+    _loadInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_loadInFlight, future)) _loadInFlight = null;
+    }
+  }
+
+  Future<void> _loadInternal({required bool silent}) async {
     if (!silent) {
       _isLoading = true;
       _error = null;
@@ -130,17 +142,6 @@ class SalesViewModel extends ChangeNotifier {
     _fromDate = null;
     _toDate = null;
     load();
-  }
-
-  /// Loads the product name suggestions for the search autocomplete.
-  /// Called once when the tab opens; failures are silently ignored.
-  Future<void> loadProductSuggestions() async {
-    try {
-      _productSuggestions = await _service.products();
-      notifyListeners();
-    } on Exception {
-      // Non-critical — suggestions are a nice-to-have.
-    }
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -328,6 +329,7 @@ class SalesViewModel extends ChangeNotifier {
     'alt_phone': s.altPhone,
     'address': s.address,
     'purchased_product': s.purchasedProduct,
+    'branch': s.branch,
     'purchase_date': s.purchaseDate?.toIso8601String().substring(0, 10),
     'created_by_employee_id': s.createdByEmployeeId,
     if (s.createdByName != null)
@@ -348,7 +350,6 @@ class SalesViewModel extends ChangeNotifier {
     return SaleDraft(
       name: (payload['name'] as String?) ?? '',
       phone: payload['phone'] as String?,
-      altPhone: payload['alt_phone'] as String?,
       address: payload['address'] as String?,
       purchasedProduct: payload['purchased_product'] as String?,
       purchaseDate: payload['purchase_date'] as String?,

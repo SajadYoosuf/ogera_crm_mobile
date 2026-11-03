@@ -4,7 +4,6 @@
 //
 // BACKEND ENDPOINTS (routes/sales.py):
 //   GET    /sales                  — paged list, filterable by search/product/date
-//   GET    /sales/products         — distinct product names for filter/form suggestions
 //   GET    /sales/{id}             — single sale detail
 //   POST   /sales                  — create (admin/manager only)
 //   PUT    /sales/{id}             — update (admin/manager only)
@@ -49,12 +48,17 @@ class SalesService {
     return SalePage.fromJson(asMap(data));
   }
 
-  /// Distinct product names from past sales.
-  /// Used to populate autocomplete suggestions in the search bar and form.
+  /// Active products from the catalogue, used by the sale form.
   Future<List<String>> products() async {
-    final data = await _api.get('/sales/products');
-    return asList(data)
-        .whereType<String>()
+    final data = asMap(
+      await _api.get(
+        '/products',
+        query: {'limit': 200, 'is_active': 'true'},
+      ),
+    );
+    return asList(data['items'])
+        .map((product) => (product['name'] as String?)?.trim() ?? '')
+        .where((product) => product.isNotEmpty)
         .toList(growable: false);
   }
 

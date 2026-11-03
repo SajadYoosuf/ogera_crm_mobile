@@ -18,6 +18,8 @@
 
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -30,7 +32,12 @@ import '../../view_models/session_view_model.dart';
 import 'sale_form_screen.dart';
 
 class SalesTab extends StatefulWidget {
-  const SalesTab({super.key});
+  const SalesTab({super.key, this.autoLoad = true});
+
+  /// Standalone routes load themselves. The shell owns loading for its
+  /// IndexedStack tab so the widget is not fetched once while hidden and again
+  /// when it becomes visible.
+  final bool autoLoad;
 
   @override
   State<SalesTab> createState() => _SalesTabState();
@@ -38,23 +45,31 @@ class SalesTab extends StatefulWidget {
 
 class _SalesTabState extends State<SalesTab> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
-    // Load after the first frame so the Provider tree is ready.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final vm = context.read<SalesViewModel>();
-      vm.load();
-      vm.loadProductSuggestions();
-    });
+    if (widget.autoLoad) {
+      // Load after the first frame so the Provider tree is ready.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<SalesViewModel>().load();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value, SalesViewModel vm) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) vm.setSearch(value);
+    });
   }
 
   @override
@@ -87,7 +102,7 @@ class _SalesTabState extends State<SalesTab> {
                   child: OgeraSearchField(
                     controller: _searchController,
                     hint: 'Search by name, phone or product…',
-                    onChanged: vm.setSearch,
+                    onChanged: (value) => _onSearchChanged(value, vm),
                     onClear: () => vm.setSearch(''),
                   ),
                 ),
@@ -336,6 +351,13 @@ class _SaleCard extends StatelessWidget {
               ),
             if (sale.phone != null)
               Text(sale.phone!, style: theme.textTheme.bodySmall),
+            if (sale.branch != null && sale.branch!.trim().isNotEmpty)
+              Text(
+                sale.branch!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: OgeraColors.muted,
+                ),
+              ),
           ],
         ),
         trailing: canWrite

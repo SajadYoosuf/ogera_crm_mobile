@@ -2,21 +2,16 @@
 //
 // Create or edit a sale record.
 //
-// WHAT IT DOES:
-//   - Shows a form with all sale fields: name, phone, alt phone, product,
-//     purchase date, address, and which employee recorded it.
-//   - Validates the name (required) before saving.
-//   - Calls SalesViewModel.create() or SalesViewModel.update() on save.
-//   - If the device is offline, the view model queues the action and returns null
-//     (treated as success). A banner reminds the user the change will sync later.
+// FIELDS:
+//   - Customer name (required)
+//   - Phone
+//   - Product purchased (dropdown from past sales suggestions)
+//   - Branch (dropdown: malappuram / kottakkal / perinthalmanna)
+//   - Purchase date (date picker)
+//   - Address
 //
-// HOW TO OPEN:
-//   Navigator.of(context).push(MaterialPageRoute(
-//     builder: (_) => ChangeNotifierProvider.value(
-//       value: context.read<SalesViewModel>(),
-//       child: SaleFormScreen(existing: sale), // null = create
-//     ),
-//   ));
+// Created-by is auto-set to the signed-in employee — not shown.
+// Alt. phone is removed (not needed at point of sale).
 
 library;
 
@@ -24,8 +19,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/sale.dart';
+import '../../services/products_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/sales_view_model.dart';
+import '../../view_models/session_view_model.dart';
+
+const _branches = ['malappuram', 'kottakkal', 'perinthalmanna'];
 
 class SaleFormScreen extends StatefulWidget {
   /// Pass an existing sale to edit it. Pass null to create a new one.
@@ -42,45 +41,73 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
   late final SaleDraft _draft;
   bool _isSaving = false;
+  bool _isLoadingProducts = true;
   String? _error;
+  List<String> _productSuggestions = const [];
 
-  // Text controllers — needed so we can pre-fill the form when editing.
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
-  late final TextEditingController _altPhoneCtrl;
   late final TextEditingController _addressCtrl;
-  late final TextEditingController _productCtrl;
 
   bool get _isEditing => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
-    _draft = _isEditing
-        ? SaleDraft.fromSale(widget.existing!)
-        : SaleDraft();
+    _draft = _isEditing ? SaleDraft.fromSale(widget.existing!) : SaleDraft();
+
+    // Load product options when the sale form is opened.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadProducts();
+      }
+    });
+
+    // Auto-set created_by to the signed-in employee on new records.
+    if (!_isEditing) {
+      final session = context.read<SessionViewModel>();
+      _draft.createdByEmployeeId = session.userId == 0 ? null : session.userId;
+    }
 
     _nameCtrl = TextEditingController(text: _draft.name);
     _phoneCtrl = TextEditingController(text: _draft.phone ?? '');
-    _altPhoneCtrl = TextEditingController(text: _draft.altPhone ?? '');
     _addressCtrl = TextEditingController(text: _draft.address ?? '');
-    _productCtrl = TextEditingController(text: _draft.purchasedProduct ?? '');
+  }
+
+  Future<void> _loadProducts() async {
+    try {
+      final products = await context.read<ProductsService>().list(limit: 200);
+      if (!mounted) return;
+      setState(() {
+        _productSuggestions = products
+            .map((product) => product.name.trim())
+            .where((name) => name.isNotEmpty)
+            .toList(growable: false);
+        _isLoadingProducts = false;
+      });
+    } on Exception {
+      if (mounted) setState(() => _isLoadingProducts = false);
+    }
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _altPhoneCtrl.dispose();
     _addressCtrl.dispose();
-    _productCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final suggestions = _productSuggestions;
+
     return Scaffold(
+      backgroundColor: OgeraColors.canvas,
       appBar: AppBar(
+        backgroundColor: OgeraColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: Text(_isEditing ? 'Edit sale' : 'Add sale'),
         actions: [
           if (_isSaving)
@@ -102,85 +129,96 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
           children: [
             if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: OgeraColors.danger),
-                ),
-              ),
+              _ErrorBanner(message: _error!),
 
-            // Name (required)
-            TextFormField(
-              controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Customer name *',
-                hintText: 'Full name',
+            // Customer name (required)
+            _Field(
+              label: 'Customer name *',
+              child: TextFormField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(hintText: 'Full name'),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    (v ?? '').trim().isEmpty ? 'Customer name is required.' : null,
+                onChanged: (v) => _draft.name = v,
               ),
-              textCapitalization: TextCapitalization.words,
-              validator: (v) {
-                if ((v ?? '').trim().isEmpty) return 'Customer name is required.';
-                return null;
-              },
-              onChanged: (v) => _draft.name = v,
             ),
-            const SizedBox(height: 16),
 
             // Phone
-            TextFormField(
-              controller: _phoneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                hintText: '10-digit number',
+            _Field(
+              label: 'Phone',
+              child: TextFormField(
+                controller: _phoneCtrl,
+                decoration: const InputDecoration(hintText: '10-digit number'),
+                keyboardType: TextInputType.phone,
+                onChanged: (v) =>
+                    _draft.phone = v.trim().isEmpty ? null : v.trim(),
               ),
-              keyboardType: TextInputType.phone,
-              onChanged: (v) => _draft.phone = v.trim().isEmpty ? null : v.trim(),
             ),
-            const SizedBox(height: 16),
 
-            // Alt phone
-            TextFormField(
-              controller: _altPhoneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Alt. phone',
-                hintText: 'Optional second number',
+            // Product purchased — dropdown from past sales
+            _Field(
+              label: 'Product purchased',
+              child: DropdownButtonFormField<String>(
+                initialValue: suggestions.contains(_draft.purchasedProduct)
+                    ? _draft.purchasedProduct
+                    : null,
+                hint: const Text('Select product'),
+                isExpanded: true,
+                decoration: const InputDecoration(),
+                items: suggestions
+                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                    .toList(),
+                onChanged: _isLoadingProducts
+                    ? null
+                    : (v) => setState(() => _draft.purchasedProduct = v),
               ),
-              keyboardType: TextInputType.phone,
-              onChanged: (v) => _draft.altPhone = v.trim().isEmpty ? null : v.trim(),
             ),
-            const SizedBox(height: 16),
 
-            // Product purchased — autocomplete from past sales
-            _ProductField(
-              controller: _productCtrl,
-              onChanged: (v) =>
-                  _draft.purchasedProduct = v.trim().isEmpty ? null : v.trim(),
+            // Branch
+            _Field(
+              label: 'Branch',
+              child: DropdownButtonFormField<String>(
+                initialValue: _branches.contains(_draft.branch) ? _draft.branch : null,
+                hint: const Text('Select branch'),
+                isExpanded: true,
+                decoration: const InputDecoration(),
+                items: _branches
+                    .map((b) => DropdownMenuItem(
+                          value: b,
+                          child: Text(
+                            b[0].toUpperCase() + b.substring(1),
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _draft.branch = v),
+              ),
             ),
-            const SizedBox(height: 16),
 
             // Purchase date
-            _DateField(
+            _Field(
               label: 'Purchase date',
-              value: _draft.purchaseDate,
-              onChanged: (date) => setState(() => _draft.purchaseDate = date),
+              child: _DatePicker(
+                value: _draft.purchaseDate,
+                onChanged: (date) => setState(() => _draft.purchaseDate = date),
+              ),
             ),
-            const SizedBox(height: 16),
 
             // Address
-            TextFormField(
-              controller: _addressCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                hintText: 'Installation address',
+            _Field(
+              label: 'Address',
+              child: TextFormField(
+                controller: _addressCtrl,
+                decoration:
+                    const InputDecoration(hintText: 'Installation address'),
+                maxLines: 2,
+                onChanged: (v) =>
+                    _draft.address = v.trim().isEmpty ? null : v.trim(),
               ),
-              maxLines: 2,
-              onChanged: (v) =>
-                  _draft.address = v.trim().isEmpty ? null : v.trim(),
             ),
-            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -196,18 +234,10 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
     });
 
     _draft.name = _nameCtrl.text.trim();
-    _draft.phone = _phoneCtrl.text.trim().isEmpty
-        ? null
-        : _phoneCtrl.text.trim();
-    _draft.altPhone = _altPhoneCtrl.text.trim().isEmpty
-        ? null
-        : _altPhoneCtrl.text.trim();
-    _draft.address = _addressCtrl.text.trim().isEmpty
-        ? null
-        : _addressCtrl.text.trim();
-    _draft.purchasedProduct = _productCtrl.text.trim().isEmpty
-        ? null
-        : _productCtrl.text.trim();
+    _draft.phone =
+        _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim();
+    _draft.address =
+        _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim();
 
     final vm = context.read<SalesViewModel>();
     final error = _isEditing
@@ -227,67 +257,82 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   }
 }
 
-// ── Product autocomplete field ─────────────────────────────────────────────
+// ── Shared label + field wrapper ───────────────────────────────────────────
 
-class _ProductField extends StatelessWidget {
-  const _ProductField({required this.controller, required this.onChanged});
+class _Field extends StatelessWidget {
+  const _Field({required this.label, required this.child});
 
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
+  final String label;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final suggestions = context.watch<SalesViewModel>().productSuggestions;
-
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: controller.text),
-      optionsBuilder: (textEditingValue) {
-        final query = textEditingValue.text.toLowerCase();
-        if (query.isEmpty) return suggestions;
-        return suggestions.where((s) => s.toLowerCase().contains(query));
-      },
-      fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-        return TextFormField(
-          controller: ctrl,
-          focusNode: focus,
-          decoration: const InputDecoration(
-            labelText: 'Product purchased',
-            hintText: 'Tank model or product name',
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: OgeraColors.muted,
+              letterSpacing: 0.2,
+            ),
           ),
-          onChanged: onChanged,
-        );
-      },
-      onSelected: (value) {
-        controller.text = value;
-        onChanged(value);
-      },
+          const SizedBox(height: 6),
+          child,
+        ],
+      ),
     );
   }
 }
 
-// ── Date picker field ──────────────────────────────────────────────────────
+// ── Error banner ───────────────────────────────────────────────────────────
 
-class _DateField extends StatelessWidget {
-  const _DateField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
 
-  final String label;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: OgeraColors.dangerSoft,
+        borderRadius: BorderRadius.circular(OgeraSpacing.fieldRadius),
+        border: Border.all(color: OgeraColors.danger.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: OgeraColors.danger, fontSize: 13.5),
+      ),
+    );
+  }
+}
+
+// ── Date picker ─────────────────────────────────────────────────────────────
+
+class _DatePicker extends StatelessWidget {
+  const _DatePicker({required this.value, required this.onChanged});
+
   final String? value;
   final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final date = value != null ? DateTime.tryParse(value!) : null;
-    final dateStr = date != null
+    final label = date != null
         ? '${date.day.toString().padLeft(2, '0')}/'
             '${date.month.toString().padLeft(2, '0')}/'
             '${date.year}'
-        : '';
+        : null;
 
     return InkWell(
+      borderRadius: BorderRadius.circular(OgeraSpacing.fieldRadius),
       onTap: () async {
         final picked = await showDatePicker(
           context: context,
@@ -296,26 +341,26 @@ class _DateField extends StatelessWidget {
           lastDate: DateTime.now(),
         );
         if (picked != null) {
-          final iso =
-              '${picked.year.toString().padLeft(4, '0')}-'
-              '${picked.month.toString().padLeft(2, '0')}-'
-              '${picked.day.toString().padLeft(2, '0')}';
-          onChanged(iso);
+          onChanged(
+            '${picked.year.toString().padLeft(4, '0')}-'
+            '${picked.month.toString().padLeft(2, '0')}-'
+            '${picked.day.toString().padLeft(2, '0')}',
+          );
         }
       },
       child: InputDecorator(
         decoration: InputDecoration(
-          labelText: label,
+          hintText: 'Tap to select',
           suffixIcon: date != null
               ? IconButton(
-                  icon: const Icon(Icons.clear),
+                  icon: const Icon(Icons.clear, size: 18),
                   onPressed: () => onChanged(null),
                 )
-              : const Icon(Icons.calendar_today),
+              : const Icon(Icons.calendar_today_outlined, size: 18),
         ),
         child: Text(
-          dateStr.isEmpty ? 'Tap to select' : dateStr,
-          style: dateStr.isEmpty
+          label ?? 'Tap to select',
+          style: label == null
               ? TextStyle(color: Theme.of(context).hintColor)
               : null,
         ),
