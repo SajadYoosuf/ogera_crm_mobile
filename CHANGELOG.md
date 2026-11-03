@@ -2,6 +2,33 @@
 
 ## 2026-11-03 — (branch `mobile-version1`)
 
+**refactor(mobile): split crm_services.dart into focused service files — Phase 2**
+
+Author: sajad yoosuf
+
+### Why
+`crm_services.dart` bundled four unrelated services in one 500-line file, making
+it hard to find and understand any one service. Each service now lives in its own
+file, named clearly for what it does.
+
+### What changed
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/services/contacts_service.dart` | `ContactsService`, `LeadSourceCatalog`, `SettingsOptionsCatalog` — all contact API calls |
+| Added | `lib/services/followups_service.dart` | `FollowupsService` — follow-up board, stage updates, remarks, pagination helper |
+| Added | `lib/services/staff_service.dart` | `StaffDirectoryService` — staff directory for assignee pickers |
+| Modified | `lib/services/crm_services.dart` | Replaced 462 lines of code with 3 re-export lines; all existing imports still work |
+
+### Notes
+- All 20+ files that import `crm_services.dart` continue to work without change
+  because `crm_services.dart` now re-exports all three new files.
+- New code should import the specific service file it needs (e.g.
+  `import 'services/contacts_service.dart'`) rather than the barrel.
+- `flutter analyze`: 0 issues.
+
+---
+
 **refactor(mobile): remove Professionals module — Phase 1 of MVVM rearchitecture**
 
 Author: sajad yoosuf
