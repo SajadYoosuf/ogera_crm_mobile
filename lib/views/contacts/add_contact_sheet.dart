@@ -85,8 +85,11 @@ class _AddContactSheetState extends State<AddContactSheet> {
   String? _district;
   String? _latitude;
   String? _longitude;
+  // Store both the slug (for GPS detection) and the DB id (for save) so the
+  // save path never needs a second round-trip to resolve slug → id.
   String? _selectedSource;
   String? _selectedSourceName;
+  int? _selectedSourceId;
   String? _houseStage;
   String? _tankType;
   String? _professionType;
@@ -146,6 +149,7 @@ class _AddContactSheetState extends State<AddContactSheet> {
     final slug = contact.leadSource?.slug;
     _selectedSource = (slug == null || slug.isEmpty) ? null : slug;
     _selectedSourceName = contact.leadSource?.name;
+    _selectedSourceId = contact.leadSourceId;
     final consumer = contact.consumerProfile;
     _houseStage = consumer?.houseStage;
     _tankType = consumer?.currentTankType;
@@ -273,6 +277,7 @@ class _AddContactSheetState extends State<AddContactSheet> {
       latitude: _latitude,
       longitude: _longitude,
       source: _selectedSource,
+      sourceId: _selectedSourceId,
       referredByContactId: _referral?.contact.id,
       // Consumer
       houseStage: _type == ContactKind.consumer ? _houseStage : null,
@@ -499,6 +504,7 @@ class _AddContactSheetState extends State<AddContactSheet> {
           onClear: () => setState(() {
             _selectedSource = null;
             _selectedSourceName = null;
+            _selectedSourceId = null;
             _clearGpsIfNotNeeded();
           }),
           onTap: () {
@@ -678,6 +684,8 @@ class _AddContactSheetState extends State<AddContactSheet> {
       setState(() {
         _selectedSource = picked.slug;
         _selectedSourceName = picked.name;
+        // Store the id directly — avoids a second /lead-sources fetch on save.
+        _selectedSourceId = picked.id > 0 ? picked.id : null;
         _clearGpsIfNotNeeded();
       });
     }
