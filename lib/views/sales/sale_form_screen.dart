@@ -274,8 +274,14 @@ class _ProductField extends StatelessWidget {
       initialValue: TextEditingValue(text: controller.text),
       optionsBuilder: (textEditingValue) {
         final query = textEditingValue.text.toLowerCase();
-        if (query.isEmpty) return suggestions;
-        return suggestions.where((s) => s.toLowerCase().contains(query));
+        final availableSuggestions = suggestions;
+        if (query.isEmpty) return availableSuggestions;
+        return availableSuggestions
+            .where(
+              (suggestion) =>
+                  suggestion.toLowerCase().contains(query),
+            )
+            .toList(growable: false);
       },
       fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
         return TextFormField(
