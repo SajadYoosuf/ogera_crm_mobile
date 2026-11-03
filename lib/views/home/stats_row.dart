@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../services/home_service.dart';
@@ -42,7 +43,10 @@ class StatsRow extends StatelessWidget {
     if (home.isLoading) return const ShimmerBox(height: 170);
     if (home.error != null) {
       return ErrorStateView(
-        message: 'Could not load your numbers.',
+        message: home.errorKind == FailureKind.offline
+            ? 'Check your internet connection, then try again.'
+            : 'We could not load your numbers. Please try again.',
+        kind: home.errorKind ?? FailureKind.server,
         onRetry: home.load,
       );
     }
@@ -62,7 +66,7 @@ class _KpiGrid extends StatelessWidget {
         label: 'New leads',
         value: kpis.newLeads,
         icon: Icons.person_add_alt_rounded,
-        color: OgeraColors.blue,
+        color: OgeraColors.forestInteractive,
       ),
       _KpiData(
         label: 'Open follow-ups',

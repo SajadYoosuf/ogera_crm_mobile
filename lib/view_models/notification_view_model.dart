@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../core/network/api_client.dart';
 import '../services/notification_service.dart';
 
 class NotificationViewModel extends ChangeNotifier {
@@ -21,6 +22,7 @@ class NotificationViewModel extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  FailureKind? _errorKind;
   final List<AppNotification> _items = [];
   int _unreadCount = 0;
 
@@ -28,12 +30,14 @@ class NotificationViewModel extends ChangeNotifier {
   int get unreadCount => _unreadCount;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  FailureKind? get errorKind => _errorKind;
 
   // ── Loading ──────────────────────────────────────────────────────────────
 
   Future<void> load() async {
     _isLoading = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
     try {
       final result = await _service.list();
@@ -42,7 +46,9 @@ class NotificationViewModel extends ChangeNotifier {
         ..addAll(result.items);
       _unreadCount = result.unreadCount;
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
     } finally {
       _isLoading = false;
       notifyListeners();

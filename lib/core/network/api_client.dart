@@ -56,6 +56,34 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode/$code): $message';
 }
 
+/// A failure already turned into words a person can act on.
+///
+/// View models store one of these instead of `error.toString()`, so the
+/// screen never shows raw exception text such as `ApiException(null/null)`.
+class UserFacingError {
+  const UserFacingError(this.message, this.kind);
+
+  final String message;
+  final FailureKind kind;
+}
+
+/// Translates any thrown error into a [UserFacingError].
+///
+/// - [ApiException]: already friendly (see [ApiClient]), so its message and
+///   kind are reused as they are.
+/// - Anything else (a parsing bug, a type error): a generic message. The real
+///   error is logged in debug builds only, never shown to the user.
+UserFacingError describeFailure(Object error) {
+  if (error is ApiException) {
+    return UserFacingError(error.message, error.kind);
+  }
+  if (kDebugMode) debugPrint('[Ogera] unexpected error: $error');
+  return const UserFacingError(
+    'Something unexpected happened. Pull to refresh or try again in a moment.',
+    FailureKind.server,
+  );
+}
+
 /// Thin HTTP layer shared by every service.
 ///
 /// It owns the bearer token, unwraps the response envelope, and reports a 401
@@ -153,7 +181,9 @@ class ApiClient {
       ),
     );
 
-    _log('--> POST (multipart) $uri${hasToken ? '  (authorised)' : '  (no token)'}');
+    _log(
+      '--> POST (multipart) $uri${hasToken ? '  (authorised)' : '  (no token)'}',
+    );
     final clock = Stopwatch()..start();
 
     http.Response response;

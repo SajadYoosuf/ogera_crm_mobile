@@ -9,12 +9,12 @@ import 'package:provider/provider.dart';
 
 import 'test_helpers.dart';
 
-/// The Contacts tab: the All / Consumer / Partner / Dealer tabs, search, and the
+/// The Contacts tab: the Consumer / Partner / Dealer tabs, search, and the
 /// resulting list all read from the query the server was actually sent, so the
 /// fake API below filters by the `contact_type` and `search` parameters the way
 /// the real one would.
 void main() {
-  testWidgets('All Contacts is the default tab and shows every type', (
+  testWidgets('Consumer is the default tab and shows only consumers', (
     tester,
   ) async {
     final viewModel = await _loadedViewModel();
@@ -23,10 +23,10 @@ void main() {
 
     expect(find.text('Contacts'), findsOneWidget);
     expect(find.text('Search name or phone'), findsOneWidget);
-    expect(find.text('All Contacts'), findsOneWidget);
+    expect(find.text('Consumer'), findsOneWidget);
     expect(find.text('Amina Consumer'), findsOneWidget);
-    expect(find.text('Ravi Partner'), findsOneWidget);
-    expect(find.text('Sunil Dealer'), findsOneWidget);
+    expect(find.text('Ravi Partner'), findsNothing);
+    expect(find.text('Sunil Dealer'), findsNothing);
   });
 
   testWidgets('tabs show live counts from the type-counts endpoint', (

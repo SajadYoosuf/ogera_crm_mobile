@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/expense_view_model.dart';
+import '../../view_models/sales_view_model.dart';
 import '../../view_models/session_view_model.dart';
+import '../sales/sales_tab.dart';
 import 'expenses_screen.dart';
 import 'products_screen.dart';
 import 'profile_screen.dart';
@@ -42,6 +44,34 @@ class MoreTab extends StatelessWidget {
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+          ),
+          const SizedBox(height: 22),
+
+          // — Sales ——————————————————————————————————————————————————————
+          const SectionHeader(
+            title: 'Sales',
+            icon: Icons.point_of_sale_outlined,
+          ),
+          _MenuGroup(
+            items: [
+              _MenuItem(
+                icon: Icons.point_of_sale_outlined,
+                color: OgeraColors.success,
+                label: 'Sales register',
+                caption: 'View and manage past sales records',
+                onTap: () {
+                  final salesVm = context.read<SalesViewModel>();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: salesVm,
+                        child: const SalesTab(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 22),
 

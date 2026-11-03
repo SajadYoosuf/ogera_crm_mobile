@@ -1,9 +1,9 @@
-/// Pipeline tab — contacts bucketed by stage for each of the three contact
-/// types (Consumer, Partner, Dealer).
+/// Pipeline tab — contacts bucketed by stage for each contact type
+/// (Consumer, Partner).
 ///
 /// ## Layout
 /// 1. AppBar "Pipeline" with a search icon.
-/// 2. Contact-type chips: Consumer · Partner · Dealer.
+/// 2. Contact-type chips: Consumer · Partner.
 ///    Switching triggers a full reload for that type's stages and contacts.
 /// 3. Stage strip: horizontally scrollable chips from `GET /pipeline/stages`.
 ///    Each chip shows the stage name and how many contacts sit in it.
@@ -19,6 +19,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/widgets/state_views.dart';
 import '../../services/pipeline_service.dart';
 import '../../theme/ogera_colors.dart';
@@ -73,10 +74,7 @@ class _PipelineTabState extends State<PipelineTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── contact-type selector ─────────────────────────────────────────
-          _ContactTypeBar(
-            selected: vm.activeType,
-            onSelect: vm.setContactType,
-          ),
+          _ContactTypeBar(selected: vm.activeType, onSelect: vm.setContactType),
 
           // ── stage strip ───────────────────────────────────────────────────
           if (!vm.isLoading && vm.error == null && vm.stages.isNotEmpty)
@@ -90,10 +88,7 @@ class _PipelineTabState extends State<PipelineTab> {
 
           // ── contact list ──────────────────────────────────────────────────
           Expanded(
-            child: _ContactList(
-              vm: vm,
-              searchQuery: _searchController.text,
-            ),
+            child: _ContactList(vm: vm, searchQuery: _searchController.text),
           ),
         ],
       ),
@@ -333,7 +328,11 @@ class _ContactList extends StatelessWidget {
     }
 
     if (vm.error != null) {
-      return ErrorStateView(message: vm.error!, onRetry: vm.load);
+      return ErrorStateView(
+        message: vm.error!,
+        kind: vm.errorKind ?? FailureKind.server,
+        onRetry: vm.load,
+      );
     }
 
     final contacts = vm.visibleContacts.where((c) {

@@ -2,7 +2,7 @@
 ///
 /// ## What the Pipeline tab shows
 /// The user sees contacts bucketed into pipeline stages for one contact type
-/// at a time. They switch between Consumer, Partner and Dealer with chips at
+/// at a time. They switch between Consumer and Partner with chips at
 /// the top. Below that, a horizontal stage strip lets them focus on one stage.
 ///
 /// ## How it works
@@ -21,17 +21,20 @@
 /// once. One request is cheaper than N parallel requests.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
+import '../core/network/api_client.dart';
+import '../local_db/pipeline_cache.dart';
 import '../services/pipeline_service.dart';
 
 // ─── contact type enum ─────────────────────────────────────────────────────
 
-/// Which of the three contact-type boards is open.
+/// Which of the two contact-type boards is open.
 enum PipelineContactType {
   consumer('Consumer', 'consumer'),
-  partner('Partner', 'partner'),
-  dealer('Dealer', 'dealer');
+  partner('Partner', 'partner');
 
   const PipelineContactType(this.label, this.apiValue);
 
@@ -42,14 +45,19 @@ enum PipelineContactType {
 // ─── view model ────────────────────────────────────────────────────────────
 
 class PipelineViewModel extends ChangeNotifier {
-  PipelineViewModel(this._service);
+  PipelineViewModel(this._service, {PipelineCache? cache})
+    : _cache = cache ?? PipelineCache();
 
   final PipelineService _service;
+  final PipelineCache _cache;
 
   // ── state ────────────────────────────────────────────────────────────────
 
   bool _isLoading = false;
+  bool _isOffline = false;
   String? _error;
+  FailureKind? _errorKind;
+  int _latestLoad = 0;
 
   PipelineContactType _activeType = PipelineContactType.consumer;
 
@@ -65,7 +73,10 @@ class PipelineViewModel extends ChangeNotifier {
   // ── getters ──────────────────────────────────────────────────────────────
 
   bool get isLoading => _isLoading;
+  /// True when the last load fell back to the local cache (no internet).
+  bool get isOffline => _isOffline;
   String? get error => _error;
+  FailureKind? get errorKind => _errorKind;
   PipelineContactType get activeType => _activeType;
   List<PipelineStageModel> get stages => List.unmodifiable(_stages);
   PipelineStageModel? get selectedStage => _selectedStage;
@@ -91,8 +102,10 @@ class PipelineViewModel extends ChangeNotifier {
 
   /// Initial load and pull-to-refresh.
   Future<void> load() async {
+    final request = ++_latestLoad;
     _isLoading = true;
     _error = null;
+    _errorKind = null;
     notifyListeners();
 
     try {
@@ -101,8 +114,10 @@ class PipelineViewModel extends ChangeNotifier {
         _service.stages(typeValue),
         _service.contacts(typeValue),
       ]);
+      if (request != _latestLoad) return;
       _stages = results[0] as List<PipelineStageModel>;
       _contacts = results[1] as List<PipelineContact>;
+      _isOffline = false;
       // Keep selected stage valid after reload.
       if (_selectedStage != null) {
         _selectedStage = _stages.firstWhere(
@@ -110,11 +125,27 @@ class PipelineViewModel extends ChangeNotifier {
           orElse: () => _stages.isNotEmpty ? _stages.first : _selectedStage!,
         );
       }
+      // Cache the contacts so the board works offline next time.
+      await _cache.save(contactType: typeValue, contacts: _contacts);
+    } on SocketException {
+      // No internet — serve the cached contacts so the board is still usable.
+      if (request != _latestLoad) return;
+      final cached = await _cache.load(contactType: _activeType.apiValue);
+      _contacts = cached;
+      _isOffline = true;
+      _error = cached.isEmpty ? 'No internet connection.' : null;
+      _errorKind = cached.isEmpty ? FailureKind.offline : null;
     } catch (e) {
-      _error = e.toString();
+      if (request != _latestLoad) return;
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
+      _isOffline = false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (request == _latestLoad) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

@@ -11,10 +11,10 @@ class AppTheme {
   static ThemeData build() {
     final scheme =
         ColorScheme.fromSeed(
-          seedColor: OgeraColors.blue,
+          seedColor: OgeraColors.forestInteractive,
           brightness: Brightness.light,
         ).copyWith(
-          primary: OgeraColors.blue,
+          primary: OgeraColors.forestInteractive,
           onPrimary: Colors.white,
           surface: OgeraColors.surface,
           onSurface: OgeraColors.ink,
@@ -64,20 +64,20 @@ class AppTheme {
         hintStyle: const TextStyle(color: Color(0xFF9BAAB8), fontSize: 14),
         labelStyle: const TextStyle(color: OgeraColors.muted, fontSize: 14),
         floatingLabelStyle: const TextStyle(
-          color: OgeraColors.blue,
+          color: OgeraColors.forestInteractive,
           fontSize: 14,
           fontWeight: FontWeight.w600,
         ),
         border: _fieldBorder(OgeraColors.line),
         enabledBorder: _fieldBorder(OgeraColors.line),
-        focusedBorder: _fieldBorder(OgeraColors.blue, width: 1.6),
+        focusedBorder: _fieldBorder(OgeraColors.forestInteractive, width: 1.6),
         errorBorder: _fieldBorder(OgeraColors.danger),
         focusedErrorBorder: _fieldBorder(OgeraColors.danger, width: 1.6),
         errorStyle: const TextStyle(color: OgeraColors.danger, fontSize: 12.5),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: OgeraColors.blue,
+          backgroundColor: OgeraColors.forestInteractive,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 52),
           textStyle: const TextStyle(
@@ -105,7 +105,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: OgeraColors.blue,
+          foregroundColor: OgeraColors.forestInteractive,
           minimumSize: const Size(0, OgeraSpacing.touchTarget),
           textStyle: const TextStyle(
             fontSize: 14.5,
@@ -125,14 +125,18 @@ class AppTheme {
           return TextStyle(
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? OgeraColors.blue : OgeraColors.muted,
+            color: selected
+                ? OgeraColors.forestInteractive
+                : OgeraColors.muted,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: 23,
-            color: selected ? OgeraColors.blue : OgeraColors.muted,
+            color: selected
+                ? OgeraColors.forestInteractive
+                : OgeraColors.muted,
           );
         }),
       ),
@@ -174,7 +178,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: OgeraColors.blue,
+        color: OgeraColors.forestInteractive,
         linearTrackColor: OgeraColors.line,
       ),
       listTileTheme: const ListTileThemeData(

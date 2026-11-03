@@ -78,7 +78,7 @@ class Expense {
       employeeName: json['employee_name'] as String?,
       title: json['title'] as String,
       category: ExpenseCategory.fromValue(json['category'] as String? ?? 'other'),
-      amount: (json['amount'] as num).toDouble(),
+      amount: parseExpenseAmount(json['amount']),
       billPhotoUrl: json['bill_photo_url'] as String?,
       status: ExpenseStatus.fromValue(json['status'] as String? ?? 'pending'),
       rejectionReason: json['rejection_reason'] as String?,
@@ -90,6 +90,23 @@ class Expense {
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
+}
+
+/// Reads a money amount from the API.
+///
+/// WHY: the backend stores amounts as Decimal (exact cents) and Pydantic sends
+/// them as JSON strings, e.g. "250.00". A plain `as num` cast crashes on that
+/// string, so this accepts either a number or a numeric string.
+///
+/// Input: the raw JSON value. Output: the amount as a double.
+/// Throws a FormatException if the value is neither a number nor a numeric string.
+double parseExpenseAmount(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final parsed = double.tryParse(value);
+    if (parsed != null) return parsed;
+  }
+  throw FormatException('Invalid expense amount: $value');
 }
 
 /// Payload for creating a new expense.

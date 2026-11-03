@@ -13,16 +13,20 @@ import 'services/location_streaming_service.dart';
 import 'services/employees_service.dart';
 import 'services/password_reset_service.dart';
 import 'services/products_service.dart';
+import 'services/sales_service.dart';
 import 'theme/app_theme.dart';
 import 'view_models/forgot_password_view_model.dart';
 import 'view_models/login_view_model.dart';
 import 'view_models/session_view_model.dart';
 import 'views/root_router.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load the .env file (Firebase keys) BEFORE Firebase reads them.
+  await dotenv.load(fileName: '.env');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   LocationStreamingService.init();
   SystemChrome.setSystemUIOverlayStyle(
@@ -53,9 +57,6 @@ class OgeraCrmApp extends StatelessWidget {
         ProxyProvider<ApiClient, ContactsService>(
           update: (_, api, _) => ContactsService(api),
         ),
-        ProxyProvider<ApiClient, ProfessionalsService>(
-          update: (_, api, _) => ProfessionalsService(api),
-        ),
         ProxyProvider<ApiClient, FollowupsService>(
           update: (_, api, _) => FollowupsService(api),
         ),
@@ -76,6 +77,9 @@ class OgeraCrmApp extends StatelessWidget {
         ),
         ProxyProvider<ApiClient, EmployeesService>(
           update: (_, api, _) => EmployeesService(api),
+        ),
+        ProxyProvider<ApiClient, SalesService>(
+          update: (_, api, _) => SalesService(api),
         ),
 
         ChangeNotifierProvider<SessionViewModel>(

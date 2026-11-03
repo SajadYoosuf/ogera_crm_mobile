@@ -14,6 +14,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/utils/launchers.dart' show Launchers;
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
@@ -31,6 +32,7 @@ class StaffScreen extends StatefulWidget {
 class _StaffScreenState extends State<StaffScreen> {
   bool _loading = false;
   String? _error;
+  FailureKind? _errorKind;
   List<EmployeeDirectoryEntry> _staff = [];
   final _searchController = TextEditingController();
   String _query = '';
@@ -54,11 +56,14 @@ class _StaffScreenState extends State<StaffScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorKind = null;
     });
     try {
       _staff = await context.read<EmployeesService>().directory();
     } catch (e) {
-      _error = e.toString();
+      final failure = describeFailure(e);
+      _error = failure.message;
+      _errorKind = failure.kind;
     } finally {
       setState(() => _loading = false);
     }
@@ -101,7 +106,11 @@ class _StaffScreenState extends State<StaffScreen> {
               builder: (_) {
                 if (_loading) return const LoadingListView(itemHeight: 64);
                 if (_error != null) {
-                  return ErrorStateView(message: _error!, onRetry: _load);
+                  return ErrorStateView(
+                    message: _error!,
+                    kind: _errorKind ?? FailureKind.server,
+                    onRetry: _load,
+                  );
                 }
                 if (_filtered.isEmpty) {
                   return const EmptyStateView(

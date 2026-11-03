@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, visibleForTesting;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/network/api_client.dart';
@@ -80,9 +80,7 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    if (kDebugMode) {
-      debugPrint('[AuthService] signIn → email: $email  password: $password');
-    }
+    // Never log the password, not even in debug builds.
     dynamic body;
     try {
       body = await _api.post(

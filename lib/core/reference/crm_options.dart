@@ -60,13 +60,15 @@ class CrmOptions {
     'Other',
   ];
 
-  static const currentTankSuggestions = <String>[
-    'Concrete',
-    'PVC',
-    'Plastic',
-    'Stainless steel',
-    'None',
-  ];
+  /// Tank types live in Settings > Lists & Options (`GET /settings/enums/tank_type`).
+  /// The API accepts only stored values, so a typed label such as "PVC" is rejected.
+  /// This is the server's default list, used until the real one loads.
+  static const defaultTankTypes = <String, String>{
+    'plastic': 'Plastic',
+    'concrete': 'Concrete',
+    'steel': 'Steel',
+    'other': 'Other',
+  };
 
   static const tankSizeSuggestions = <String>[
     '500',
@@ -76,6 +78,19 @@ class CrmOptions {
     '2000',
     '3000',
   ];
+
+  /// Activity types used when the Settings list (`activity_type`) cannot be
+  /// loaded. Same seed values as the backend's `DEFAULT_ENUMS[ACTIVITY_TYPE]`.
+  static const defaultActivityTypes = <String, String>{
+    'phone_call': 'Phone call',
+    'field_visit': 'Field visit',
+    'whatsapp': 'WhatsApp',
+    'meeting': 'Meeting',
+    'email': 'Email',
+    'demo': 'Demo',
+    'internal_note': 'Internal note',
+    'other': 'Other',
+  };
 
   static const districts = <String>[
     'Malappuram',

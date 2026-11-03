@@ -1,5 +1,193 @@
 # Changelog
 
+## 2026-11-03 — (branch `mobile-version1`)
+
+**feat(mobile): add Sales module — Phase 5**
+
+Author: sajad yoosuf
+
+### Why
+Sales CRUD already exists on the web backend (routes/sales.py). The mobile app
+needed its own screens so staff can view and record sales in the field.
+
+### What was added
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/models/sale.dart` | `Sale`, `SaleDraft`, `SalePage` — Dart models matching the backend schema |
+| Added | `lib/services/sales_service.dart` | API calls: list, detail, create, update, delete, products |
+| Added | `lib/view_models/sales_view_model.dart` | State: paged list, search/filter, CRUD actions, offline cache + pending queue |
+| Added | `lib/views/sales/sales_tab.dart` | Sales list screen with search, offline banner, edit/delete actions |
+| Added | `lib/views/sales/sale_form_screen.dart` | Create/edit form with product autocomplete and date picker |
+| Modified | `lib/main.dart` | Added `SalesService` ProxyProvider |
+| Modified | `lib/views/shell_screen.dart` | Added `SalesViewModel` to MultiProvider |
+| Modified | `lib/views/more/more_tab.dart` | Added "Sales register" menu entry that opens `SalesTab` |
+
+### How Sales offline writes work
+- If the device is offline during create/edit/delete, the action is saved to the
+  `pending_sales` SQLite table.
+- On the next successful `load()`, all pending actions are replayed oldest-first
+  before fetching fresh data.
+- If a pending action is rejected by the server (e.g. deleted id), it is removed
+  from the queue so it does not block future syncs.
+
+### Notes
+- Access: all signed-in users can view sales. Admins and managers can create, edit, and delete.
+- The Sales register is accessible from the More tab → "Sales register".
+- `flutter analyze`: 0 issues.
+
+---
+
+**feat(mobile): live CRM options already wired — Phase 4 (no new code needed)**
+
+Author: sajad yoosuf
+
+### Why
+This phase was planned to replace hardcoded dropdown lists with live API data.
+On investigation, `SettingsOptionsCatalog` in `contacts_service.dart` already
+calls `GET /settings/enums/{category}` with a hardcoded fallback — this is the
+correct pattern.
+
+### What is already live
+- `house_stage` — via `ContactsService.houseStages()`
+- `tank_type` — via `SettingsOptionsCatalog.options('tank_type', fallback: CrmOptions.defaultTankTypes)` in `add_contact_sheet.dart`
+- `activity_type` — via `SettingsOptionsCatalog.options('activity_type', ...)` in `tasks_service.dart`, `lead_work_service.dart`, and `quick_action_sheets.dart`
+- Lead sources — via `ContactsService.leadSourceOptions()` which calls `GET /lead-sources`
+
+### What remains hardcoded (intentional)
+- `CrmOptions.districts` — Kerala districts don't change; no backend endpoint exists for them.
+- `CrmOptions.panchayaths` — Same reason.
+- Suggestion lists (waterSourceSuggestions, tankSizeSuggestions, awarenessLevels) — UI hints, not stored values.
+
+### No files changed in this phase.
+
+---
+
+**feat(mobile): add local SQLite offline cache — Phase 3**
+
+Author: sajad yoosuf
+
+### Why
+The app had no offline support: opening any tab without internet showed an error
+and the screen was empty. This phase adds a local SQLite cache so users can still
+browse contacts, tasks, and the pipeline board while offline (field visits, poor
+signal areas).
+
+### What changed
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/local_db/local_database.dart` | SQLite singleton — opens one DB file, creates all cache tables on first run |
+| Added | `lib/local_db/contacts_cache.dart` | Saves/loads the contacts list by type+page; max-age 1 hour |
+| Added | `lib/local_db/tasks_cache.dart` | Saves/loads tasks by date (YYYY-MM-DD); max-age 30 minutes |
+| Added | `lib/local_db/pipeline_cache.dart` | Saves/loads full pipeline contacts by contact-type; max-age 2 hours |
+| Added | `lib/local_db/sales_cache.dart` | Saves/loads the sales list + `pending_sales` queue for offline writes |
+| Modified | `lib/view_models/contacts_view_model.dart` | Saves page-1 to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/tasks_view_model.dart` | Saves today's tasks to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/pipeline_view_model.dart` | Saves pipeline contacts to cache on success; serves cache on `SocketException`; adds `isOffline` getter |
+| Modified | `lib/view_models/session_view_model.dart` | Calls `LocalDatabase.close()` on sign-out and on 401, so cache is reset between users |
+
+### How the offline pattern works
+
+```
+try {
+  final data = await _service.list(...);   // 1. Try API
+  await _cache.save(data);                 // 2. On success, save to SQLite
+  _items = data;
+  _isOffline = false;
+} on SocketException {                     // 3. No internet
+  _items = await _cache.load();            // 4. Serve stale cache
+  _isOffline = true;                       // 5. UI can show "offline" banner
+}
+```
+
+### Cache table locations
+All tables live in `ogera_cache.db` (separate from the GPS queue `ogera_location_queue.db`):
+- `contacts_cache` — page-keyed (e.g. `consumer|page1`)
+- `tasks_cache` — date-keyed (e.g. `2025-01-15`)
+- `pipeline_cache` — contact-type-keyed (`consumer`, `partner`, `dealer`)
+- `sales_cache` — single row (`list`)
+- `pending_sales` — offline write queue (create / update / delete)
+
+### Notes
+- `sqflite` was already in `pubspec.yaml` (used by the GPS location queue).
+  No new packages added.
+- The existing `location_queue.dart` was **not changed**.
+- Cache is never used when filters or search are active (only clean first-page
+  data is cached, to avoid showing filtered results in an offline context).
+- `LocalDatabase.close()` on sign-out ensures user A's cached data is not
+  visible to user B on the same device.
+- `flutter analyze`: 0 issues.
+
+---
+
+
+**refactor(mobile): split crm_services.dart into focused service files — Phase 2**
+
+Author: sajad yoosuf
+
+### Why
+`crm_services.dart` bundled four unrelated services in one 500-line file, making
+it hard to find and understand any one service. Each service now lives in its own
+file, named clearly for what it does.
+
+### What changed
+
+| Status | File | Change |
+| --- | --- | --- |
+| Added | `lib/services/contacts_service.dart` | `ContactsService`, `LeadSourceCatalog`, `SettingsOptionsCatalog` — all contact API calls |
+| Added | `lib/services/followups_service.dart` | `FollowupsService` — follow-up board, stage updates, remarks, pagination helper |
+| Added | `lib/services/staff_service.dart` | `StaffDirectoryService` — staff directory for assignee pickers |
+| Modified | `lib/services/crm_services.dart` | Replaced 462 lines of code with 3 re-export lines; all existing imports still work |
+
+### Notes
+- All 20+ files that import `crm_services.dart` continue to work without change
+  because `crm_services.dart` now re-exports all three new files.
+- New code should import the specific service file it needs (e.g.
+  `import 'services/contacts_service.dart'`) rather than the barrel.
+- `flutter analyze`: 0 issues.
+
+---
+
+**refactor(mobile): remove Professionals module — Phase 1 of MVVM rearchitecture**
+
+Author: sajad yoosuf
+
+### Why
+The Professionals (partner-contacts) module was removed from the mobile MVP scope. It was the only module not in the agreed set (Home, Contacts, Follow-ups, Tasks, Pipeline, Expenses, Products, Profile, Sales). Removing it before adding new features keeps the codebase smaller and easier to understand.
+
+### What was removed
+
+| Status | File | Reason |
+| --- | --- | --- |
+| Deleted | `lib/views/professionals/professionals_tab.dart` | UI for professionals list — not needed for MVP |
+| Deleted | `lib/views/professionals/professional_form_screen.dart` | Create/edit form for professionals |
+| Deleted | `lib/view_models/professionals_view_model.dart` | State management (200 lines) |
+| Deleted | `lib/models/professional.dart` | `Professional`, `ProfessionalDraft`, `ProfessionalType` models |
+| Deleted | `test/professionals_widget_test.dart` | Widget tests for removed screen |
+| Deleted | `test/professionals_view_model_test.dart` | Unit tests for removed view model |
+
+### What was simplified
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modified | `lib/services/crm_services.dart` | Removed `ProfessionalsService` class (41 lines) |
+| Modified | `lib/main.dart` | Removed `ProfessionalsService` ProxyProvider |
+| Modified | `lib/views/shell_screen.dart` | Removed professionals provider, imports, and `openProfessionalForm` function |
+| Modified | `lib/views/shell_scope.dart` | Removed `ProfessionalsViewModel` from the shell provider list |
+| Modified | `lib/views/contacts/referral_picker_sheet.dart` | Rewritten: removed professional tab, now searches contacts only. `ReferralChoice` simplified to hold a single `Contact` |
+| Modified | `lib/views/contacts/add_contact_sheet.dart` | `referredByContactId` simplified to `_referral?.contact.id` |
+| Modified | `test/crm_services_test.dart` | Removed `ProfessionalsService` test group |
+| Modified | `test/shell_screen_test.dart` | Removed `ProfessionalsService` provider from harness |
+| Modified | `test/e2e/mobile_backend_e2e_test.dart` | Removed professionals group and `_Phone.professionals` getter |
+
+### Notes
+- `flutter analyze`: 0 issues after removal.
+- Referral picker still works: it searches all contacts (consumer + partner contact types) using the existing `/contacts` endpoint. A professional partner contact stored in the backend can still be selected as a referrer — the UI tab for managing professionals is what was removed.
+- Pre-existing pending changes in this commit: `API_CONNECTION.md` (backend URL updated from Render to Vercel), `AndroidManifest.xml`, `app_config.dart`, `home_service.dart`, `followups_view_model.dart`, `pipeline_view_model.dart`, `session_view_model.dart` (carried forward from previous work session).
+
+---
+
 ## 2026-10-23 — `c1e94b5` (branch `version1`)
 
 **test(mobile/login): full unit, widget, and integration test suite for login screen**

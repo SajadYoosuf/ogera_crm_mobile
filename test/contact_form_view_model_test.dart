@@ -132,10 +132,10 @@ void main() {
       expect(viewModel.draft.source, 'offline');
     });
 
-    test('an awareness contact is stored with awareness_mode 1', () async {
+    test('a partner contact is sent with contact_type partner', () async {
       final recorder = _Recorder();
       final viewModel = ContactFormViewModel(ContactsService(recorder.api));
-      viewModel.setType(ContactType.awareness);
+      viewModel.setType(ContactKind.partner);
       viewModel.draft
         ..phone = '9876543210'
         ..source = 'meta'
@@ -144,7 +144,7 @@ void main() {
 
       await viewModel.save();
 
-      expect(recorder.posted!['consumer_profile'], {'awareness_mode': 1});
+      expect(recorder.posted, containsPair('contact_type', 'partner'));
       // No name typed: the phone number stands in so the API accepts it.
       expect(recorder.posted, containsPair('name', '9876543210'));
     });

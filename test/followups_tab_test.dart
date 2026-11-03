@@ -100,7 +100,7 @@ void main() {
     final api = fakeApiClient({
       '/contacts': (_) => pageOf([]),
       '/tasks': (_) => _noTasks,
-      '/contacts/stage-types': (_) => <Map<String, dynamic>>[],
+      '/pipeline/stages': (_) => <Map<String, dynamic>>[],
       '/employees/directory': (_) => <Map<String, dynamic>>[],
     });
     final viewModel = FollowupsViewModel(
@@ -130,7 +130,7 @@ Future<FollowupsViewModel> _loadedViewModel(AuthUser user) async {
       leadJson(id: 2, name: 'Rohan Lead', stage: 'won'),
     ]),
     '/tasks': (_) => _noTasks,
-    '/contacts/stage-types': (_) => [
+    '/pipeline/stages': (_) => [
       stageJson(id: 'new', label: 'New', orderIndex: 0),
       stageJson(id: 'won', label: 'Won', orderIndex: 1),
     ],

@@ -15,12 +15,14 @@ import '../../core/widgets/ogera_widgets.dart';
 import '../../services/tasks_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/tasks_view_model.dart';
+import 'task_card.dart';
 
 Future<void> showTaskRescheduleSheet(BuildContext context, Task task) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    backgroundColor: OgeraColors.surface,
+    shape: taskSheetShape,
     builder: (_) => ChangeNotifierProvider.value(
       value: context.read<TasksViewModel>(),
       child: _TaskRescheduleSheet(task: task),
@@ -62,35 +64,28 @@ class _TaskRescheduleSheetState extends State<_TaskRescheduleSheet> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _time,
-    );
+    final picked = await showTimePicker(context: context, initialTime: _time);
     if (picked != null) setState(() => _time = picked);
   }
 
-  String get _isoDateTime {
-    final dt = DateTime(
-      _date.year,
-      _date.month,
-      _date.day,
-      _time.hour,
-      _time.minute,
-    );
-    return dt.toIso8601String();
-  }
+  /// The chosen date and time combined into one local DateTime.
+  DateTime get _dueAt =>
+      DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
 
+  /// Saves the new time. The view model returns null on success or a message on failure.
   Future<void> _save() async {
     setState(() => _saving = true);
-    final vm = context.read<TasksViewModel>();
-    final ok = await vm.reschedule(widget.task.id, _isoDateTime);
+    final error = await context.read<TasksViewModel>().reschedule(
+      widget.task,
+      _dueAt,
+    );
     if (!mounted) return;
-    if (ok) {
+    if (error == null) {
       Navigator.pop(context);
       showToast(context, 'Task rescheduled');
     } else {
       setState(() => _saving = false);
-      showToast(context, vm.error ?? 'Failed to reschedule', isError: true);
+      showToast(context, error, isError: true);
     }
   }
 

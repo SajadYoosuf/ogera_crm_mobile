@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/network/api_client.dart';
 import '../../core/widgets/state_views.dart';
 import '../../services/notification_service.dart';
 import '../../theme/ogera_colors.dart';
@@ -60,6 +61,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             if (vm.error != null) {
               return ErrorStateView(
                 message: vm.error!,
+                kind: vm.errorKind ?? FailureKind.server,
                 onRetry: vm.load,
               );
             }
@@ -112,9 +114,7 @@ class _NotifTile extends StatelessWidget {
                 height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: item.isRead
-                      ? Colors.transparent
-                      : OgeraColors.blue,
+                  color: item.isRead ? Colors.transparent : OgeraColors.blue,
                 ),
               ),
             ),
@@ -128,8 +128,9 @@ class _NotifTile extends StatelessWidget {
                     item.title,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight:
-                          item.isRead ? FontWeight.w500 : FontWeight.w700,
+                      fontWeight: item.isRead
+                          ? FontWeight.w500
+                          : FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 3),

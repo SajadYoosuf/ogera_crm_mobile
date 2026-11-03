@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ogera_crm_mobile/models/auth_session.dart';
-import 'package:ogera_crm_mobile/services/expense_service.dart';
 import 'package:ogera_crm_mobile/theme/app_theme.dart';
-import 'package:ogera_crm_mobile/view_models/expense_view_model.dart';
 import 'package:ogera_crm_mobile/view_models/session_view_model.dart';
 import 'package:ogera_crm_mobile/views/more/more_tab.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +11,9 @@ import 'test_helpers.dart';
 /// The More module: the profile header, role-gated menu sections, and the
 /// sign-out confirmation flow.
 void main() {
-  testWidgets('Head sees the Team section with the staff directory', (tester) async {
+  testWidgets('Head sees the Team section with the staff directory', (
+    tester,
+  ) async {
     final auth = FakeAuthService();
     final session = await _sessionFor(UserRole.salesHead, auth);
 
@@ -28,6 +28,14 @@ void main() {
     expect(find.text('TEAM'), findsOneWidget);
     expect(find.text('Staff directory'), findsOneWidget);
     expect(find.text('Performance'), findsNothing);
+
+    // Account section is below the fold — scroll until Sign out is visible.
+    for (var i = 0; i < 12; i++) {
+      if (find.text('Sign out').evaluate().isNotEmpty) break;
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
 
     expect(find.text('ACCOUNT'), findsOneWidget);
     expect(find.text('Profile and settings'), findsOneWidget);
@@ -62,7 +70,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Bring Sign out into view first; the menu is taller than the test screen.
-    await tester.ensureVisible(find.text('Sign out'));
+    // ensureVisible uses Iterable.single which throws if the finder returns 0
+    // results — scroll manually instead so we handle the case where Sign out
+    // is off-screen.
+    for (var i = 0; i < 8; i++) {
+      if (find.text('Sign out').evaluate().isNotEmpty) break;
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
@@ -85,10 +100,7 @@ Future<SessionViewModel> _sessionFor(
   FakeAuthService auth,
 ) async {
   final api = fakeApiClient({});
-  final session = SessionViewModel(
-    auth: auth,
-    api: api,
-  );
+  final session = SessionViewModel(auth: auth, api: api);
   await session.adopt(
     AuthSession(
       accessToken: 'token',

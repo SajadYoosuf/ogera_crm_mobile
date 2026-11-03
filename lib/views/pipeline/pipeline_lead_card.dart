@@ -6,22 +6,25 @@
 ///   - District tag and an "unverified" warning when details are incomplete.
 ///   - Assigned-to label at the bottom.
 ///   - Quick-action call and WhatsApp buttons.
-///   - Tap anywhere on the card to open the ContactDetailScreen.
+///   - Tap anywhere on the card to open the PipelineLeadDetailScreen, which
+///     has the activity log, follow-ups and history for that lead.
 ///
-/// WHY NO SCHEDULE / ACTIVITY BUTTONS:
-///   The Pipeline tab is a read-only stage view; scheduling and logging are
-///   done from the contact's detail screen. Keeping the card minimal avoids
-///   navigation ambiguity and matches the rule that the Pipeline tab has no FAB.
+/// WHY NO SCHEDULE / ACTIVITY BUTTONS ON THE CARD:
+///   The card stays minimal so a tap always means "open this lead". Logging
+///   and scheduling happen on the lead screen, where the owner rule is applied.
+///   The Pipeline tab still has no FAB.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/utils/launchers.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../services/pipeline_service.dart';
 import '../../theme/ogera_colors.dart';
-import '../../views/contacts/contact_detail_screen.dart';
+import '../../view_models/session_view_model.dart';
 import '../shell_scope.dart';
+import 'pipeline_lead_detail_screen.dart';
 
 /// Stage accent colour — follows the same ramp used by the followups pipeline.
 Color _stageColor(String? slug, int orderIndex) {
@@ -61,7 +64,10 @@ class PipelineLeadCard extends StatelessWidget {
       accent: (contact.stageSlug ?? '').isNotEmpty ? accentColor : null,
       onTap: () => pushShellRoute<void>(
         context,
-        (_) => ContactDetailScreen(contactId: contact.id),
+        (_) => PipelineLeadDetailScreen(
+          contact: contact,
+          isHead: context.read<SessionViewModel>().user?.isHead ?? false,
+        ),
       ),
       padding: const EdgeInsets.fromLTRB(14, 13, 10, 11),
       child: Column(
@@ -98,11 +104,7 @@ class PipelineLeadCard extends StatelessWidget {
                 ),
               ),
               if (stageName.isNotEmpty)
-                StatusChip(
-                  label: stageName,
-                  color: accentColor,
-                  dense: true,
-                ),
+                StatusChip(label: stageName, color: accentColor, dense: true),
             ],
           ),
 
@@ -186,9 +188,8 @@ class PipelineLeadCard extends StatelessWidget {
     return slug
         .split(RegExp(r'[_\-]'))
         .map(
-          (w) => w.isEmpty
-              ? w
-              : w[0].toUpperCase() + w.substring(1).toLowerCase(),
+          (w) =>
+              w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase(),
         )
         .join(' ');
   }

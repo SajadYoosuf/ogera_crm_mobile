@@ -22,6 +22,7 @@ class FollowupsViewModel extends ChangeNotifier {
   String? _error;
   String _query = '';
   String? _assigneeFilter;
+  int _latestLoad = 0;
 
   List<Stage> get stages => List.unmodifiable(_stages);
   List<StaffMember> get staff => List.unmodifiable(_staff);
@@ -129,6 +130,7 @@ class FollowupsViewModel extends ChangeNotifier {
   }
 
   Future<void> load({bool silent = false}) async {
+    final request = ++_latestLoad;
     if (!silent) {
       _isLoading = true;
       _error = null;
@@ -140,6 +142,7 @@ class FollowupsViewModel extends ChangeNotifier {
         _service.stages(),
         _staffService.list(),
       ]);
+      if (request != _latestLoad) return;
       _leads
         ..clear()
         ..addAll(results[0] as List<Lead>);
@@ -151,10 +154,13 @@ class FollowupsViewModel extends ChangeNotifier {
         ..addAll(results[2] as List<StaffMember>);
       _error = null;
     } on ApiException catch (error) {
+      if (request != _latestLoad) return;
       _error = error.message;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (request == _latestLoad) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

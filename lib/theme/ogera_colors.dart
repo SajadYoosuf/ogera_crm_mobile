@@ -5,15 +5,22 @@ class OgeraColors {
   const OgeraColors._();
 
   static const ink = Color(0xFF0B2942);
-  static const blue = Color(0xFF126BB0);
+
+  /// Primary action color — accent-green from the web design system.
+  /// Every reference to `blue` in the codebase now renders in green so
+  /// changing this one constant re-themes the whole app.
+  static const blue = forestInteractive; // #0E7A4F
+
   static const canvas = Color(0xFFF1F5F7);
   static const line = Color(0xFFD6E0E6);
   static const muted = Color(0xFF667A8C);
 
   static const surface = Color(0xFFFFFFFF);
   static const inkSoft = Color(0xFF13375A);
-  static const blueSoft = Color(0xFFE7F1F9);
-  static const blueDeep = Color(0xFF0E568C);
+
+  /// Soft green tint — replaces the old blue-soft for selected/indicator states.
+  static const blueSoft = Color(0xFFE8F5EE); // light forest-green tint
+  static const blueDeep = Color(0xFF0A5C3A); // deeper green, replaces blueDeep
 
   /// Login/forgot-password hero background — deep forest green matching the web
   /// design system's `brand-deep-green` token (#0E4D3A).

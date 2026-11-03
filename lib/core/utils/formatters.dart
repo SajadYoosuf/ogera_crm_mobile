@@ -113,64 +113,18 @@ String humanizeSlug(String value) {
       .join(' ');
 }
 
-/// Phone numbers are stored with assorted spacing; dialling and WhatsApp both
-/// need the digits only, with the country code kept when it is present.
-String normalisePhone(String phone, {String? countryCode}) {
-  final trimmed = phone.trim();
-  if (trimmed.startsWith('+')) {
-    return '+${trimmed.substring(1).replaceAll(RegExp(r'\D'), '')}';
-  }
-  final digits = trimmed.replaceAll(RegExp(r'\D'), '');
-  final code = (countryCode ?? '').replaceAll(RegExp(r'\D'), '');
-  if (code.isEmpty) return digits;
-  return digits.startsWith(code) ? '+$digits' : '+$code$digits';
+/// Keeps only the first [count] words of an address, dropping the trailing
+/// commas left behind by the join. "MG Road, Calicut, Kerala" → "MG Road".
+String firstWords(String text, {int count = 2}) {
+  final words = text
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .map((word) => word.replaceAll(RegExp(r'[,;]+$'), ''))
+      .where((word) => word.isNotEmpty)
+      .take(count);
+  return words.join(' ');
 }
-
-/// Returns the digits required by `wa.me`: a complete international phone
-/// number without `+`, spaces, punctuation, or a domestic trunk prefix.
-///
-/// Contacts created on mobile have historically been saved as a ten-digit
-/// Indian number without a country code. Ogera is India-first, so that format
-/// is safely completed with `91`. A saved country code, a `+` prefix, or an
-/// international `00` prefix always takes precedence.
-String? normaliseWhatsAppPhone(String phone, {String? countryCode}) {
-  final trimmed = phone.trim();
-  final digits = trimmed.replaceAll(RegExp(r'\D'), '');
-  if (digits.isEmpty) return null;
-
-  final savedCountryCode = (countryCode ?? '')
-      .replaceAll(RegExp(r'\D'), '')
-      .replaceFirst(RegExp(r'^00+'), '');
-  late final String international;
-
-  if (trimmed.startsWith('+')) {
-    international = digits;
-  } else if (digits.startsWith('00')) {
-    international = digits.substring(2);
-  } else if (savedCountryCode.isNotEmpty) {
-    // Keep compatibility with older records that included the dial code in
-    // the phone field, while accepting the current local-number format.
-    international = digits.startsWith(savedCountryCode)
-        ? digits
-        : '$savedCountryCode${_withoutTrunkPrefix(digits)}';
-  } else if (digits.length == 10 ||
-      (digits.length == 11 && digits.startsWith('0'))) {
-    international = '91${_withoutTrunkPrefix(digits)}';
-  } else {
-    // A non-local number without a country field can still be a complete
-    // international number, for example one imported as 971501234567.
-    international = digits;
-  }
-
-  // WhatsApp accepts E.164-style international digits only. Do not open a
-  // malformed link and make the recovery action clear to the user instead.
-  return RegExp(r'^[1-9]\d{6,14}$').hasMatch(international)
-      ? international
-      : null;
-}
-
-String _withoutTrunkPrefix(String digits) =>
-    digits.startsWith('0') ? digits.substring(1) : digits;
 
 /// `firstOrNull` lives in package:collection, which this app does not depend on.
 T? firstOrNull<T>(Iterable<T> items) {

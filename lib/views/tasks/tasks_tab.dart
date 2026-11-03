@@ -1,14 +1,18 @@
-/// Tasks tab — shows the user's scheduled follow-up tasks.
+/// Tasks tab — shows the signed-in user's follow-up tasks.
 ///
 /// WHAT IT SHOWS:
-///   - A horizontal 7-day calendar strip: tap a day to filter.
-///   - Status chips: Open · In Progress · Completed (tapping filters).
-///   - Priority chips: Low · Medium · High.
-///   - A list of task cards (each tappable to change status or reschedule).
-///   - Summary counts badge (overdue, today, upcoming) in the app bar.
+///   - A horizontal 14-day calendar strip (3 days back, 10 forward). Tap a day to filter.
+///   - Two dropdowns: Status (All active · To Do · In Progress · Completed)
+///     and Priority (All · Low · Medium · High).
+///   - A list of task cards. Tap one to open the task detail sheet
+///     (task_detail_sheet.dart), where you change status or complete it.
+///   - An overdue count badge in the app bar.
+///
+/// ONLY YOUR TASKS:
+///   The list is always filtered to the signed-in employee (see TasksService.list).
 ///
 /// DATA FLOW:
-///   TasksViewModel (loaded here) → TasksService → GET /tasks
+///   TasksTab → TasksViewModel → TasksService → GET /tasks
 library;
 
 import 'package:flutter/material.dart';
@@ -20,8 +24,7 @@ import '../../services/tasks_service.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/tasks_view_model.dart';
 import 'task_card.dart';
-import 'task_reschedule_sheet.dart';
-import 'task_status_sheet.dart';
+import 'task_detail_sheet.dart';
 
 class TasksTab extends StatefulWidget {
   const TasksTab({super.key});
@@ -34,7 +37,7 @@ class _TasksTabState extends State<TasksTab> {
   @override
   void initState() {
     super.initState();
-    // Load after first frame so the Provider tree is ready.
+    // Load after the first frame so the Provider tree is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<TasksViewModel>().load();
     });
@@ -57,7 +60,7 @@ class _TasksTabState extends State<TasksTab> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: vm.load,
+        onRefresh: () => vm.load(),
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -74,105 +77,62 @@ class _TasksTabState extends State<TasksTab> {
                 ],
               ),
             ),
-
-            if (vm.isLoading)
-              const SliverFillRemaining(
-                child: LoadingListView(itemHeight: 84),
-              )
-            else if (vm.error != null)
-              SliverFillRemaining(
-                child: ErrorStateView(
-                  message: vm.error!,
-                  onRetry: vm.load,
-                ),
-              )
-            else if (vm.tasks.isEmpty)
-              const SliverFillRemaining(
-                child: EmptyStateView(
-                  icon: Icons.check_circle_outline_rounded,
-                  title: 'No tasks',
-                  message: 'No tasks for this date and filter.',
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) {
-                      final task = vm.tasks[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: TaskCard(
-                          task: task,
-                          onTap: () => _onTaskTap(ctx, task),
-                        ),
-                      );
-                    },
-                    childCount: vm.tasks.length,
-                  ),
-                ),
-              ),
+            ..._bodySlivers(context, vm),
           ],
         ),
       ),
     );
   }
 
-  void _onTaskTap(BuildContext context, Task task) {
-    if (task.taskState == TaskState.done) {
-      // Completed tasks can only be rescheduled (not status-changed).
-      showTaskRescheduleSheet(context, task);
-    } else {
-      _showActionMenu(context, task);
+  /// The list area. Shows exactly one of: loading, error, empty, or the tasks.
+  List<Widget> _bodySlivers(BuildContext context, TasksViewModel vm) {
+    if (vm.isLoading) {
+      return const [
+        SliverFillRemaining(child: LoadingListView(itemHeight: 84)),
+      ];
     }
-  }
 
-  void _showActionMenu(BuildContext context, Task task) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<TasksViewModel>(),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: OgeraColors.line,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz_rounded, color: OgeraColors.blue),
-                  title: const Text('Change status'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    showTaskStatusSheet(context, task);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.schedule_rounded, color: OgeraColors.info),
-                  title: const Text('Reschedule'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    showTaskRescheduleSheet(context, task);
-                  },
-                ),
-              ],
-            ),
+    // A failed load only replaces the list when there is nothing to show.
+    // If tasks are already on screen, keep them and show a banner instead.
+    if (vm.error != null && vm.tasks.isEmpty) {
+      return [
+        SliverFillRemaining(
+          child: ErrorStateView(message: vm.error!, onRetry: () => vm.load()),
+        ),
+      ];
+    }
+
+    if (vm.tasks.isEmpty) {
+      return const [
+        SliverFillRemaining(
+          child: EmptyStateView(
+            icon: Icons.check_circle_outline_rounded,
+            title: 'No tasks',
+            message: 'No tasks for this date and filter.',
           ),
         ),
+      ];
+    }
+
+    return [
+      if (vm.error != null)
+        SliverToBoxAdapter(child: _RefreshErrorBanner(message: vm.error!)),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate((ctx, i) {
+            final task = vm.tasks[i];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TaskCard(
+                task: task,
+                onTap: () => openTaskDetail(ctx, task),
+              ),
+            );
+          }, childCount: vm.tasks.length),
+        ),
       ),
-    );
+    ];
   }
 }
 
@@ -186,7 +146,7 @@ class _CalendarStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Show 7 days starting from 3 days ago so context is clear.
+    // Show 14 days, starting 3 days ago so context is clear.
     final today = DateTime.now();
     final start = today.subtract(const Duration(days: 3));
     final days = List.generate(14, (i) => start.add(Duration(days: i)));
@@ -212,8 +172,8 @@ class _CalendarStrip extends StatelessWidget {
                 color: isSelected
                     ? OgeraColors.blue
                     : isToday
-                        ? OgeraColors.blueSoft
-                        : OgeraColors.surface,
+                    ? OgeraColors.blueSoft
+                    : OgeraColors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isToday && !isSelected
@@ -255,52 +215,50 @@ class _CalendarStrip extends StatelessWidget {
   }
 }
 
-// ── Filter chips bar ──────────────────────────────────────────────────────────
+// ── Filter dropdowns ─────────────────────────────────────────────────────────
 
+/// The Status and Priority dropdowns, side by side.
 class _FilterBar extends StatelessWidget {
   const _FilterBar({required this.vm});
+
   final TasksViewModel vm;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Status filters
-          _Chip(
-            label: 'Open',
-            selected: vm.statusFilter == null || vm.statusFilter == 'open',
-            onTap: () => vm.setStatusFilter(null),
+          Expanded(
+            child: _FilterDropdown<TaskStatusFilter>(
+              label: 'Status',
+              value: vm.statusFilter,
+              items: [
+                for (final filter in TaskStatusFilter.values)
+                  DropdownMenuItem(value: filter, child: Text(filter.label)),
+              ],
+              onChanged: (filter) {
+                if (filter != null) vm.setStatusFilter(filter);
+              },
+            ),
           ),
-          const SizedBox(width: 8),
-          _Chip(
-            label: 'In Progress',
-            selected: vm.statusFilter == 'inprogress',
-            onTap: () => vm.setStatusFilter('inprogress'),
-          ),
-          const SizedBox(width: 8),
-          _Chip(
-            label: 'Completed',
-            selected: vm.statusFilter == 'completed',
-            onTap: () => vm.setStatusFilter('completed'),
-          ),
-          const SizedBox(width: 16),
-          // Priority filters
-          ...TaskPriority.values.map(
-            (p) => Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _Chip(
-                label: p.label,
-                selected: vm.priorityFilter == p,
-                onTap: () => vm.setPriorityFilter(p),
-                color: p == TaskPriority.high
-                    ? OgeraColors.danger
-                    : p == TaskPriority.medium
-                        ? OgeraColors.warning
-                        : OgeraColors.muted,
-              ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _FilterDropdown<TaskPriority?>(
+              label: 'Priority',
+              value: vm.priorityFilter,
+              items: [
+                const DropdownMenuItem<TaskPriority?>(
+                  value: null,
+                  child: Text('All priorities'),
+                ),
+                for (final priority in TaskPriority.values)
+                  DropdownMenuItem<TaskPriority?>(
+                    value: priority,
+                    child: Text(priority.label),
+                  ),
+              ],
+              onChanged: vm.setPriorityFilter,
             ),
           ),
         ],
@@ -309,51 +267,98 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({
+/// A labelled dropdown in the app's card style.
+class _FilterDropdown<T> extends StatelessWidget {
+  const _FilterDropdown({
     required this.label,
-    required this.selected,
-    required this.onTap,
-    this.color,
+    required this.value,
+    required this.items,
+    required this.onChanged,
   });
 
   final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color? color;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = color ?? OgeraColors.blue;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? activeColor : OgeraColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? activeColor : OgeraColors.line,
-          ),
-        ),
-        child: Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
           label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: selected ? Colors.white : null,
+          style: const TextStyle(fontSize: 11, color: OgeraColors.muted),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: OgeraColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: OgeraColors.line),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              items: items,
+              onChanged: onChanged,
+              isExpanded: true,
+              isDense: true,
+              borderRadius: BorderRadius.circular(12),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: OgeraColors.ink,
+              ),
+            ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+// ── Banners and badges ───────────────────────────────────────────────────────
+
+/// Shown above the list when a background refresh fails but old tasks are still on screen.
+class _RefreshErrorBanner extends StatelessWidget {
+  const _RefreshErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: OgeraColors.dangerSoft,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 16,
+            color: OgeraColors.danger,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12, color: OgeraColors.danger),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Summary badge ─────────────────────────────────────────────────────────────
-
 class _SummaryBadge extends StatelessWidget {
   const _SummaryBadge({required this.summary});
+
   final TaskSummary summary;
 
   @override

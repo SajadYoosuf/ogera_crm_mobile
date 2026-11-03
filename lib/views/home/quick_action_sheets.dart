@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/reference/crm_options.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/activity_log.dart';
@@ -22,20 +23,8 @@ import '../../services/activity_service.dart';
 import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/expense_view_model.dart';
+import '../../view_models/session_view_model.dart';
 import '../shell_scope.dart';
-
-/// Used when the Settings list cannot be loaded, so the picker is never empty.
-/// Same seed values as the backend's `DEFAULT_ENUMS[ACTIVITY_TYPE]`.
-const _fallbackActivityTypes = {
-  'phone_call': 'Phone call',
-  'field_visit': 'Field visit',
-  'whatsapp': 'WhatsApp',
-  'meeting': 'Meeting',
-  'email': 'Email',
-  'demo': 'Demo',
-  'internal_note': 'Internal note',
-  'other': 'Other',
-};
 
 /// Flow: contact picker, then the activity form. Shows a confirmation when saved.
 Future<void> openActivityLog(BuildContext context) async {
@@ -47,7 +36,10 @@ Future<void> openActivityLog(BuildContext context) async {
 
   final saved = await showShellSheet<bool>(
     context,
-    (_) => ActivityLogSheet(contact: contact),
+    (_) => ActivityLogSheet(
+      contactId: contact.id,
+      contactName: contact.displayName,
+    ),
   );
   if (saved == true && context.mounted) {
     _showSavedMessage(context, 'Activity logged');
@@ -72,7 +64,10 @@ void _showSavedMessage(BuildContext context, String message) {
 // ───────────────────────────────────────────────────────── contact picker
 
 /// Searches contacts and returns the one the user taps.
-/// Results come from `GET /contacts`, so the server already applies visibility.
+///
+/// Staff see contacts assigned to them or created by them, because the backend
+/// lets only those employees log an activity (see `services/lead_access.py`).
+/// Admin and manager see every contact, since they may log on any lead.
 class _ContactPickerSheet extends StatefulWidget {
   const _ContactPickerSheet();
 
@@ -113,18 +108,39 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
   /// Loads matching contacts. Errors are stored and shown with a retry button.
   Future<void> _search(String query) async {
     final service = context.read<ContactsService>();
+    final session = context.read<SessionViewModel>();
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final contacts = await service.search(query);
+      final contacts = session.isHead
+          ? await service.search(query)
+          : await _staffContacts(service, query, session.userId);
       if (mounted) setState(() => _contacts = contacts);
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Loads the contacts assigned to [userId] and the ones [userId] created,
+  /// then merges them. A contact both assigned and created appears once.
+  Future<List<Contact>> _staffContacts(
+    ContactsService service,
+    String query,
+    int userId,
+  ) async {
+    final results = await Future.wait([
+      service.search(query, assignedTo: userId),
+      service.search(query, createdBy: userId),
+    ]);
+    final byId = <int, Contact>{};
+    for (final contact in [...results[0], ...results[1]]) {
+      byId[contact.id] = contact;
+    }
+    return byId.values.toList(growable: false);
   }
 
   @override
@@ -214,9 +230,17 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
 /// Required by the backend: an activity type and non-blank notes.
 /// The time is set by the server, so the form has no date field.
 class ActivityLogSheet extends StatefulWidget {
-  const ActivityLogSheet({super.key, required this.contact});
+  const ActivityLogSheet({
+    super.key,
+    required this.contactId,
+    required this.contactName,
+  });
 
-  final Contact contact;
+  /// The contact the activity is logged against.
+  final int contactId;
+
+  /// Shown under the title so the user knows whose activity this is.
+  final String contactName;
 
   @override
   State<ActivityLogSheet> createState() => _ActivityLogSheetState();
@@ -241,7 +265,7 @@ class _ActivityLogSheetState extends State<ActivityLogSheet> {
     final api = context.read<ApiClient>();
     _typesFuture = SettingsOptionsCatalog.of(
       api,
-    ).options('activity_type', fallback: _fallbackActivityTypes);
+    ).options('activity_type', fallback: CrmOptions.defaultActivityTypes);
   }
 
   @override
@@ -268,7 +292,7 @@ class _ActivityLogSheetState extends State<ActivityLogSheet> {
       outcome: _outcome,
     );
     try {
-      await service.log(widget.contact.id, draft);
+      await service.log(widget.contactId, draft);
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (error) {
       _fail(error.message);
@@ -308,7 +332,7 @@ class _ActivityLogSheetState extends State<ActivityLogSheet> {
             ),
             const SizedBox(height: 2),
             Text(
-              widget.contact.displayName,
+              widget.contactName,
               style: const TextStyle(fontSize: 13, color: OgeraColors.muted),
             ),
             const SizedBox(height: 16),

@@ -64,6 +64,7 @@ class PipelineContact {
     this.stageName,
     this.district,
     this.assignedToName,
+    this.assignedToId,
     this.missingFields = const [],
   });
 
@@ -75,10 +76,12 @@ class PipelineContact {
   final String? stageName;
   final String? district;
   final String? assignedToName;
+
+  /// The employee who owns this lead. Null when nobody is assigned yet.
+  final int? assignedToId;
   final List<String> missingFields;
 
-  String get displayName =>
-      (name ?? '').trim().isEmpty ? phone : name!.trim();
+  String get displayName => (name ?? '').trim().isEmpty ? phone : name!.trim();
   bool get isVerified => missingFields.isEmpty;
 
   /// Parses one row from the contacts list endpoint.
@@ -102,6 +105,7 @@ class PipelineContact {
       stageName: asText(stageMap['stage_name']),
       district: asText(json['district']),
       assignedToName: asText(assignedEmployee['name']),
+      assignedToId: asInt(assignedEmployee['id']),
       missingFields: [
         for (final f in (json['missing_fields'] as List?) ?? const [])
           f.toString(),

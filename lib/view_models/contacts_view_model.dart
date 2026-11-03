@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
 import '../core/reference/crm_options.dart';
+import '../local_db/contacts_cache.dart';
 import '../models/contact.dart';
 import '../services/crm_services.dart';
 
@@ -12,24 +14,50 @@ import '../services/crm_services.dart';
 /// Search is debounced so typing a phone number does not fire ten requests, and
 /// every fetch carries a sequence number: a slow response for an abandoned
 /// query is discarded rather than overwriting fresher results.
+///
+/// OFFLINE SUPPORT:
+///   On a successful fetch the first page is saved to [ContactsCache].
+///   When the API call fails with a SocketException (no internet), the cached
+///   page is shown instead and [isOffline] is set to true so the UI can show
+///   a banner.
 class ContactsViewModel extends ChangeNotifier {
-  ContactsViewModel(this._service);
+  ContactsViewModel(this._service, {ContactsCache? cache})
+    : _cache = cache ?? ContactsCache();
 
   final ContactsService _service;
+  final ContactsCache _cache;
 
   static const _pageSize = 20;
   static const _debounce = Duration(milliseconds: 350);
 
   final List<Contact> _contacts = [];
   Timer? _debounceTimer;
+  // Sequence counter — prevents a slow API response from overwriting a newer one.
+  //
+  // HOW IT WORKS:
+  // Every call to _fetch() increments _sequence and stores the value in a
+  // local variable called `sequence`. When the API responds (which may take
+  // several seconds), the handler checks: is my local `sequence` still the
+  // latest one? If not, a newer fetch has started and this response is stale —
+  // so we silently discard it instead of replacing the already-fresher list.
+  //
+  // EXAMPLE:
+  //   User types "Jo"  → _sequence becomes 1, fetch #1 starts
+  //   User types "Joh" → _sequence becomes 2, fetch #2 starts
+  //   Fetch #1 returns → sequence(1) != _sequence(2) → DISCARDED ✓
+  //   Fetch #2 returns → sequence(2) == _sequence(2) → APPLIED   ✓
+  //
+  // Without this, a slow network could cause the "Jo" results to arrive after
+  // "Joh" results and overwrite them, leaving the user looking at wrong data.
   int _sequence = 0;
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _isOffline = false;
   String? _error;
   String _query = '';
-  // null means the "All Contacts" tab; otherwise one of consumer/partner/dealer.
-  ContactKind? _kind;
+  // The Contacts screen has one tab per type, and Consumer is the first tab.
+  ContactKind? _kind = ContactKind.consumer;
   String? _source;
   String? _startDate;
   String? _endDate;
@@ -42,6 +70,8 @@ class ContactsViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _page < _totalPages;
+  /// True when the last fetch fell back to the local cache (no internet).
+  bool get isOffline => _isOffline;
   String? get error => _error;
   String get query => _query;
   ContactKind? get kind => _kind;
@@ -144,10 +174,36 @@ class ContactsViewModel extends ChangeNotifier {
       _totalPages = result.totalPages;
       _total = result.total;
       _error = null;
+      _isOffline = false;
+
+      // Save the first page to the local cache so we can serve it offline.
+      // Only cache when no search or filter is active (cached results without
+      // context would be confusing to a user who opens the app offline).
+      if (replace && page == 1 && !hasFilters && _query.isEmpty) {
+        await _cache.save(
+          ContactsCache.cacheKey(kind: _kind, page: 1),
+          result.contacts,
+        );
+      }
+
       if (replace) await _loadCounts();
+    } on SocketException {
+      // No internet — serve the cached first page instead.
+      if (sequence != _sequence) return;
+      if (replace) {
+        final cached = await _cache.load(
+          ContactsCache.cacheKey(kind: _kind, page: 1),
+        );
+        _contacts
+          ..clear()
+          ..addAll(cached);
+        _isOffline = true;
+        _error = cached.isEmpty ? 'No internet connection.' : null;
+      }
     } on ApiException catch (error) {
       if (sequence != _sequence) return;
       _error = error.message;
+      _isOffline = false;
       if (replace) _contacts.clear();
     } finally {
       if (sequence == _sequence) {
@@ -172,7 +228,7 @@ class ContactsViewModel extends ChangeNotifier {
   /// without a full refetch.
   void upsert(Contact contact) {
     final index = _contacts.indexWhere((item) => item.id == contact.id);
-    final shown = _kind == null || contact.kind == _kind;
+    final shown = _kind == null || contact.contactType == _kind;
     if (index == -1) {
       if (shown) {
         _contacts.insert(0, contact);
@@ -242,15 +298,12 @@ class ContactFormViewModel extends ChangeNotifier {
 
   /// A campaign target must name the staff member it belongs to — the same rule
   /// the API enforces, checked here so the user sees it before a round-trip.
+  // TODO(campaign): isCampaignTarget / campaignStaffId not yet on ContactDraft.
   String? validateCampaign() {
-    if (!draft.isCampaignTarget) return null;
-    if ((draft.campaignStaffId ?? '').isEmpty) {
-      return 'Select which staff this campaign-target contact belongs to.';
-    }
     return null;
   }
 
-  void setType(ContactType type) {
+  void setType(ContactKind type) {
     draft.contactType = type;
     notifyListeners();
   }
@@ -271,6 +324,8 @@ class ContactFormViewModel extends ChangeNotifier {
 
   /// The professional reference is stored alongside a name/type/phone snapshot,
   /// so the record still reads correctly if the professional is later edited.
+  // TODO(referral): professionalType/Name/Phone/Address/Latitude/Longitude not
+  // yet on ContactDraft — add them when the professional-referral UI is built.
   void setProfessionalReferral({
     required String type,
     required String name,
@@ -279,12 +334,6 @@ class ContactFormViewModel extends ChangeNotifier {
     String? latitude,
     String? longitude,
   }) {
-    draft.professionalType = type;
-    draft.professionalName = name;
-    draft.professionalPhone = phone;
-    draft.professionalAddress = address;
-    draft.professionalLatitude = latitude;
-    draft.professionalLongitude = longitude;
     draft.referredByContactId = null;
     notifyListeners();
   }
@@ -296,17 +345,11 @@ class ContactFormViewModel extends ChangeNotifier {
   }
 
   void _clearProfessionalReferral() {
-    draft.professionalType = null;
-    draft.professionalName = null;
-    draft.professionalPhone = null;
-    draft.professionalAddress = null;
-    draft.professionalLatitude = null;
-    draft.professionalLongitude = null;
+    draft.referredByContactId = null;
   }
 
+  // TODO(campaign): isCampaignTarget / campaignStaffId not yet on ContactDraft.
   void setCampaign({required bool isTarget, String? staffId}) {
-    draft.isCampaignTarget = isTarget;
-    draft.campaignStaffId = isTarget ? staffId : null;
     notifyListeners();
   }
 

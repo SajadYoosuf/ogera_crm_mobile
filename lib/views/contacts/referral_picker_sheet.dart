@@ -7,40 +7,17 @@ import '../../core/network/api_client.dart';
 import '../../core/widgets/ogera_widgets.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/contact.dart';
-import '../../models/professional.dart';
 import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 
-/// The two referral paths a contact can be created from.
-enum ReferralSource {
-  contact('Existing contact', Icons.person_rounded),
-  professional('Professional', Icons.handyman_rounded);
-
-  const ReferralSource(this.label, this.icon);
-
-  final String label;
-  final IconData icon;
-}
-
-/// What the picker hands back. Only one of the two is ever populated, because
-/// the paths are mutually exclusive.
+/// The contact a new contact was referred by.
+/// The backend stores this as referredByContactId on the contact record.
 class ReferralChoice {
-  const ReferralChoice.contact(this.contact)
-    : professional = null,
-      source = ReferralSource.contact;
-  const ReferralChoice.professional(this.professional)
-    : contact = null,
-      source = ReferralSource.professional;
+  const ReferralChoice(this.contact);
 
-  final ReferralSource source;
-  final Contact? contact;
-  final Professional? professional;
+  final Contact contact;
 
-  String get label => switch (source) {
-    ReferralSource.contact => 'Contact · ${contact!.displayName}',
-    ReferralSource.professional =>
-      '${professional!.type.label} · ${professional!.displayName}',
-  };
+  String get label => 'Contact · ${contact.displayName}';
 }
 
 Future<ReferralChoice?> showReferralPicker(BuildContext context) {
@@ -61,15 +38,10 @@ class _ReferralPickerSheet extends StatefulWidget {
 class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
   final _controller = TextEditingController();
 
-  ReferralSource _source = ReferralSource.contact;
-
   Timer? _debounce;
   bool _isLoading = false;
   String? _error;
   List<Contact> _contacts = const [];
-  List<Professional> _professionals = const [];
-
-  List<ReferralSource> get _sources => ReferralSource.values;
 
   @override
   void initState() {
@@ -98,25 +70,13 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
       _error = null;
     });
     try {
-      switch (_source) {
-        case ReferralSource.contact:
-          _contacts = await context.read<ContactsService>().search(query);
-        case ReferralSource.professional:
-          _professionals = await context.read<ProfessionalsService>().list(
-            query: query.isEmpty ? null : query,
-          );
-      }
+      // kind: null searches all contact types (consumer + partner)
+      _contacts = await context.read<ContactsService>().search(query);
     } on ApiException catch (error) {
       _error = error.message;
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _switchSource(ReferralSource source) {
-    if (_source == source) return;
-    setState(() => _source = source);
-    _search(_controller.text.trim());
   }
 
   @override
@@ -145,21 +105,11 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
               ],
             ),
           ),
-          FilterChipBar<ReferralSource>(
-            values: _sources,
-            selected: _source,
-            labelOf: (source) => source.label,
-            onSelected: _switchSource,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: OgeraSearchField(
               controller: _controller,
-              hint: switch (_source) {
-                ReferralSource.contact => 'Search contact name or phone',
-                ReferralSource.professional => 'Search name, phone, or place',
-              },
+              hint: 'Search contact name or phone',
               onChanged: _onQueryChanged,
             ),
           ),
@@ -178,45 +128,7 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
       );
     }
 
-    final tiles = switch (_source) {
-      ReferralSource.contact =>
-        _contacts
-            .map(
-              (contact) => _tile(
-                title: contact.displayName,
-                subtitle: [
-                  contact.phone,
-                  if ((contact.panchayath ?? '').isNotEmpty)
-                    contact.panchayath!,
-                ].join(' · '),
-                icon: Icons.person_rounded,
-                onTap: () =>
-                    Navigator.of(context).pop(ReferralChoice.contact(contact)),
-              ),
-            )
-            .toList(),
-      ReferralSource.professional =>
-        _professionals
-            .map(
-              (professional) => _tile(
-                title: professional.displayName,
-                subtitle: [
-                  professional.type.label,
-                  professional.phone,
-                  if (professional.locationSummary != null)
-                    professional.locationSummary!,
-                ].join(' · '),
-                icon: professional.type.icon,
-                color: professional.type.color,
-                onTap: () => Navigator.of(
-                  context,
-                ).pop(ReferralChoice.professional(professional)),
-              ),
-            )
-            .toList(),
-    };
-
-    if (tiles.isEmpty) {
+    if (_contacts.isEmpty) {
       return const EmptyStateView(
         icon: Icons.search_off_rounded,
         title: 'Nothing found',
@@ -227,45 +139,45 @@ class _ReferralPickerSheetState extends State<_ReferralPickerSheet> {
     return ListView.separated(
       controller: controller,
       padding: const EdgeInsets.only(bottom: 28),
-      itemCount: tiles.length,
+      itemCount: _contacts.length,
       separatorBuilder: (_, _) => const Divider(indent: 20, endIndent: 20),
-      itemBuilder: (_, index) => tiles[index],
-    );
-  }
-
-  Widget _tile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-    Color color = OgeraColors.blue,
-  }) {
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Icon(icon, size: 19, color: color),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 12.5, color: OgeraColors.muted),
-      ),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: OgeraColors.muted,
-      ),
+      itemBuilder: (_, index) {
+        final contact = _contacts[index];
+        return ListTile(
+          onTap: () => Navigator.of(context).pop(ReferralChoice(contact)),
+          leading: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: OgeraColors.blue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: const Icon(
+              Icons.person_rounded,
+              size: 19,
+              color: OgeraColors.blue,
+            ),
+          ),
+          title: Text(
+            contact.displayName,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            [
+              contact.phone,
+              if ((contact.district ?? '').isNotEmpty) contact.district!,
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12.5, color: OgeraColors.muted),
+          ),
+          trailing: const Icon(
+            Icons.chevron_right_rounded,
+            color: OgeraColors.muted,
+          ),
+        );
+      },
     );
   }
 }

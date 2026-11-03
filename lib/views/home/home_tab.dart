@@ -3,16 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/ogera_widgets.dart';
-import '../../core/widgets/state_views.dart';
-import '../../models/followup.dart';
 import '../../theme/ogera_colors.dart';
-import '../../view_models/followups_view_model.dart';
+import '../../view_models/expense_view_model.dart';
 import '../../view_models/home_view_model.dart';
 import '../../view_models/session_view_model.dart';
-import '../followups/lead_detail_screen.dart';
+import '../more/expenses_screen.dart';
+import '../more/products_screen.dart';
+import '../more/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
-import '../shell_scope.dart';
 import 'checkin_button.dart';
+import 'recent_leads_section.dart';
+import 'recent_tasks_section.dart';
 import 'stats_row.dart';
 
 /// Home tab: greeting, the check-in card, the stats for the chosen range, and
@@ -70,10 +71,56 @@ class _Greeting extends StatelessWidget {
               ],
             ),
           ),
-          StatusChip(
+          _RoleBadge(
             label: user.role.label,
-            tone: user.isHead ? StatusTone.brand : StatusTone.info,
             icon: user.isHead ? Icons.insights_rounded : Icons.badge_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The role pill next to the greeting: a green gradient with a soft shadow,
+/// so the role reads as a badge rather than a plain tag.
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [OgeraColors.forest, OgeraColors.forestInteractive],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: OgeraColors.forest.withValues(alpha: 0.28),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: OgeraColors.forestAccent),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
           ),
         ],
       ),
@@ -89,18 +136,21 @@ class _StaffHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final home = context.read<HomeViewModel>();
-    final followups = context.watch<FollowupsViewModel>();
 
     return Scaffold(
       backgroundColor: OgeraColors.canvas,
+      drawer: const _HomeDrawer(),
       appBar: AppBar(
         title: const Text('Home'),
-        actions: const [NotificationBellButton(), SizedBox(width: 4)],
+        actions: const [
+          NotificationBellButton(),
+          SizedBox(width: 6),
+          _ProfileAvatarButton(),
+          SizedBox(width: 8),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await Future.wait([home.load(), followups.refresh()]);
-        },
+        onRefresh: home.load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -110,12 +160,24 @@ class _StaffHome extends StatelessWidget {
             120,
           ),
           children: [
+            // Greeting: "Good morning, Sajad" + role badge
             const _Greeting(),
+            // Field check-in status card
             const CheckinCard(),
             const SizedBox(height: 20),
+            // KPI tiles: New leads / Open follow-ups / Overdue / Won
             const StatsRow(),
-            const SizedBox(height: 20),
-            const _NeedsAttention(),
+            const SizedBox(height: 24),
+            // Recent leads section — contacts added in the chosen period
+            const SectionHeader(
+              title: 'Leads',
+              icon: Icons.person_add_alt_1_rounded,
+            ),
+            const RecentLeadsSection(),
+            const SizedBox(height: 24),
+            // Tasks section — tasks due in the chosen period
+            const SectionHeader(title: 'Tasks', icon: Icons.task_alt_rounded),
+            const RecentTasksSection(),
           ],
         ),
       ),
@@ -123,186 +185,120 @@ class _StaffHome extends StatelessWidget {
   }
 }
 
-/// Overdue and due-today follow-ups. Each group shows at most four cards.
-class _NeedsAttention extends StatelessWidget {
-  const _NeedsAttention();
+// ─────────────────────────────────────────────────────────────────────────────
+// AppBar profile avatar — tapping opens ProfileScreen.
+
+class _ProfileAvatarButton extends StatelessWidget {
+  const _ProfileAvatarButton();
 
   @override
   Widget build(BuildContext context) {
-    final followups = context.watch<FollowupsViewModel>();
-    final grouped = followups.leadsByDueBucket;
-    final overdue = grouped[DueBucket.overdue]!;
-    final today = grouped[DueBucket.today]!;
-
-    if (followups.isLoading) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            title: 'Needs attention',
-            icon: Icons.priority_high_rounded,
-          ),
-          LoadingListView(itemCount: 2, itemHeight: 80),
-        ],
-      );
-    }
-
-    if (overdue.isEmpty && today.isEmpty) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            title: 'Needs attention',
-            icon: Icons.priority_high_rounded,
-          ),
-          OgeraCard(
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_circle_rounded,
-                  color: OgeraColors.success,
-                  size: 22,
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Nothing overdue and nothing due today. Well done.',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (overdue.isNotEmpty)
-          _TaskGroup(
-            bucket: DueBucket.overdue,
-            leads: overdue,
-            viewModel: followups,
-          ),
-        if (overdue.isNotEmpty && today.isNotEmpty) const SizedBox(height: 20),
-        if (today.isNotEmpty)
-          _TaskGroup(
-            bucket: DueBucket.today,
-            leads: today,
-            viewModel: followups,
-          ),
-      ],
+    final user = context.watch<SessionViewModel>().user;
+    if (user == null) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+      ),
+      child: OgeraAvatar(
+        name: user.name,
+        phone: user.phone,
+        size: 34,
+        color: user.isHead ? OgeraColors.ink : OgeraColors.blue,
+      ),
     );
   }
 }
 
-class _TaskGroup extends StatelessWidget {
-  const _TaskGroup({
-    required this.bucket,
-    required this.leads,
-    required this.viewModel,
-  });
+// ─────────────────────────────────────────────────────────────────────────────
+// Home page drawer — Products and Expenses navigation.
 
-  final DueBucket bucket;
-  final List<Lead> leads;
-  final FollowupsViewModel viewModel;
+class _HomeDrawer extends StatelessWidget {
+  const _HomeDrawer();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(
-          title: bucket.label,
-          icon: bucket.icon,
-          action: StatusChip(
-            label: '${leads.length}',
-            color: bucket.color,
-            dense: true,
-          ),
+    final user = context.watch<SessionViewModel>().user;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: OgeraColors.surface,
+                border: const Border(
+                  bottom: BorderSide(color: OgeraColors.line),
+                ),
+              ),
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  OgeraAvatar(
+                    name: user?.name ?? '',
+                    phone: user?.phone,
+                    size: 52,
+                    color: (user?.isHead ?? false)
+                        ? OgeraColors.ink
+                        : OgeraColors.blue,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    user?.name ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    user?.role.label ?? '',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: OgeraColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.inventory_2_outlined,
+                color: OgeraColors.blue,
+              ),
+              title: const Text('Products'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProductsScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.receipt_long_outlined,
+                color: OgeraColors.warning,
+              ),
+              title: const Text('Expenses'),
+              onTap: () {
+                final expenseVm = context.read<ExpenseViewModel>();
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: expenseVm,
+                      child: const ExpensesScreen(),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
-        for (final lead in leads.take(4)) ...[
-          _TaskCard(lead: lead, bucket: bucket, viewModel: viewModel),
-          const SizedBox(height: 10),
-        ],
-        if (leads.length > 4)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              '${leads.length - 4} more in the Follow-ups tab',
-              style: const TextStyle(fontSize: 12.5, color: OgeraColors.muted),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _TaskCard extends StatelessWidget {
-  const _TaskCard({
-    required this.lead,
-    required this.bucket,
-    required this.viewModel,
-  });
-
-  final Lead lead;
-  final DueBucket bucket;
-  final FollowupsViewModel viewModel;
-
-  @override
-  Widget build(BuildContext context) {
-    final stage = viewModel.stageById(lead.stage);
-    final due = lead.dueDate;
-
-    return OgeraCard(
-      accent: bucket.color,
-      onTap: () =>
-          pushShellRoute<void>(context, (_) => LeadDetailScreen(lead: lead)),
-      padding: const EdgeInsets.fromLTRB(13, 12, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  lead.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    if (stage != null) ...[
-                      StatusChip(
-                        label: stage.label,
-                        color: stage.color,
-                        dense: true,
-                      ),
-                      const SizedBox(width: 7),
-                    ],
-                    if (due != null)
-                      Text(
-                        formatDayMonth(due),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: bucket.color,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: OgeraColors.muted),
-        ],
       ),
     );
   }

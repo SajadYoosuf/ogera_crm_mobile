@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/reference/crm_options.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/form_fields.dart';
+import '../../services/crm_services.dart';
 import '../../theme/ogera_colors.dart';
 import '../../view_models/contacts_view_model.dart';
 
@@ -32,6 +33,28 @@ class _ContactFiltersSheetState extends State<_ContactFiltersSheet> {
   late String? _source = context.read<ContactsViewModel>().source;
   late String? _startDate = context.read<ContactsViewModel>().startDate;
   late String? _endDate = context.read<ContactsViewModel>().endDate;
+
+  // Lead sources from the server, as {slug: name}. Null until they load, so the
+  // picker waits instead of showing a made-up list.
+  Map<String, String>? _sourceLabels;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSources();
+  }
+
+  /// Fetches the active lead sources once when the sheet opens.
+  Future<void> _loadSources() async {
+    final labels = await context.read<ContactsService>().leadSourceOptions();
+    if (!mounted) return;
+    setState(() => _sourceLabels = labels);
+  }
+
+  /// The name for a stored slug. Uses the server's name when it is listed, and
+  /// the built-in label for a slug the server no longer lists.
+  String _sourceName(String slug) =>
+      _sourceLabels?[slug] ?? CrmOptions.sourceLabel(slug);
 
   void _apply() {
     context.read<ContactsViewModel>().applyFilters(
@@ -81,15 +104,18 @@ class _ContactFiltersSheetState extends State<_ContactFiltersSheet> {
             OgeraPickerField(
               label: 'Source',
               icon: Icons.input_rounded,
-              value: _source == null ? null : CrmOptions.sourceLabel(_source!),
+              value: _source == null ? null : _sourceName(_source!),
               placeholder: 'Any source',
               onClear: () => setState(() => _source = null),
               onTap: () async {
+                final labels = _sourceLabels;
+                // Still loading: nothing to pick yet.
+                if (labels == null) return;
                 final picked = await showOptionPicker<String>(
                   context,
                   title: 'Source',
-                  options: CrmOptions.contactSources,
-                  labelOf: CrmOptions.sourceLabel,
+                  options: labels.keys.toList(),
+                  labelOf: _sourceName,
                   selected: _source,
                   searchable: false,
                 );

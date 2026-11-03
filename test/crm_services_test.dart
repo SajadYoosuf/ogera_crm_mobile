@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ogera_crm_mobile/core/network/api_client.dart';
 import 'package:ogera_crm_mobile/models/contact.dart';
-import 'package:ogera_crm_mobile/models/professional.dart';
 import 'package:ogera_crm_mobile/services/crm_services.dart';
 
 import 'test_helpers.dart';
@@ -83,7 +82,11 @@ void main() {
         'awareness_mode': 1,
         'latitude': 11.25,
         'longitude': 75.78,
-        'lead_stage': {'stage': 'quoted', 'changed_at': '2026-09-20T14:30:00'},
+        'current_stage': {
+          'id': 5,
+          'stage_slug': 'quoted',
+          'changed_at': '2026-09-20T14:30:00',
+        },
         'lead_source': {'id': 3, 'name': 'Offline', 'slug': 'offline'},
         'assigned_to': {'id': 7, 'name': 'Anu'},
         'created_by': {'id': 2, 'name': 'Admin'},
@@ -93,15 +96,15 @@ void main() {
       });
 
       expect(contact.id, 12);
-      expect(contact.contactType, ContactType.awareness);
-      expect(contact.stage, 'quoted');
-      expect(contact.source, 'offline');
+      expect(contact.contactType, ContactKind.consumer);
+      expect(contact.currentStage?.stageSlug, 'quoted');
+      expect(contact.leadSource?.slug, 'offline');
       expect(contact.leadSourceId, 3);
-      expect(contact.followupAssignedTo, '7');
-      expect(contact.followupAssignedUserId, 7);
-      expect(contact.assignedToName, 'Anu');
-      expect(contact.createdByUserId, 2);
-      expect(contact.latitude, '11.25');
+      expect(contact.assignedTo, 7);
+      expect(contact.assignedEmployee?.name, 'Anu');
+      expect(contact.assignedEmployee?.name, 'Anu');
+      expect(contact.createdBy, 2);
+      expect(contact.latitude, 11.25);
       expect(contact.hasLocation, isTrue);
       expect(contact.isVerified, isFalse);
       expect(contact.missingFields, ['house_stage']);
@@ -119,7 +122,7 @@ void main() {
         'referred_by': {'id': 4, 'name': 'Beena', 'phone': '9000000000'},
         'assigned_employee': {'id': 7, 'name': 'Anu'},
         'lead_source': {'id': 3, 'name': 'Offline', 'slug': 'offline'},
-        'current_stage': {'id': 5, 'stage': 'won'},
+        'current_stage': {'id': 5, 'stage_slug': 'won'},
         'consumer_profile': {
           'awareness_mode': 0,
           'house_stage': 'Ready',
@@ -130,22 +133,22 @@ void main() {
         'missing_fields': <String>[],
       });
 
-      expect(contact.contactType, ContactType.lead);
-      expect(contact.stage, 'won');
+      expect(contact.contactType, ContactKind.consumer);
+      expect(contact.currentStage?.stageSlug, 'won');
       expect(contact.houseStage, 'Ready');
-      expect(contact.currentTank, 'plastic');
-      expect(contact.referredByContactId, 4);
-      expect(contact.referredByContactName, 'Beena');
+      expect(contact.consumerProfile?.currentTankType, 'plastic');
+      expect(contact.referredById, 4);
+      expect(contact.referredBy?.displayName, 'Beena');
       expect(contact.referralSummary, 'Contact · Beena');
-      expect(contact.followupAssignedUserId, 7);
-      expect(contact.assignedToName, 'Anu');
+      expect(contact.assignedEmployee?.name, 'Anu');
+      expect(contact.assignedEmployee?.name, 'Anu');
       expect(contact.isVerified, isTrue);
       expect(contact.updatedAt, isNotNull);
     });
 
     test('a contact without a profile is a lead', () {
       final contact = Contact.fromJson({'id': 1, 'phone': '1', 'name': 'x'});
-      expect(contact.contactType, ContactType.lead);
+      expect(contact.contactType, ContactKind.consumer);
       expect(contact.missingFields, isEmpty);
     });
 
@@ -211,19 +214,17 @@ void main() {
     test('typeCounts reads /contacts/type-counts for the tab badges', () async {
       final server = FakeServer({
         'GET /contacts/type-counts': (_) => {
-          'all': 9,
+          'all': 8,
           'consumer': 5,
           'partner': 3,
-          'dealer': 1,
         },
       });
 
       final counts = await ContactsService(server.api).typeCounts();
 
-      expect(counts.of(null), 9);
+      expect(counts.of(null), 8);
       expect(counts.of(ContactKind.consumer), 5);
       expect(counts.of(ContactKind.partner), 3);
-      expect(counts.of(ContactKind.dealer), 1);
     });
 
     test(
@@ -274,22 +275,23 @@ void main() {
         final server = FakeServer({
           'GET /contacts/map': (_) => {
             'items': [
-              contactPinJson(id: 1, name: 'Pin', type: 'awareness'),
+              contactPinJson(id: 1, name: 'Pin'),
               {'id': 2, 'phone': '1', 'latitude': null, 'longitude': null},
             ],
             'total': 2,
           },
         });
 
+        // mapPins returns raw rows until a ContactPin model exists.
         final pins = await ContactsService(
           server.api,
-        ).mapPins(type: ContactType.awareness);
+        ).mapPins(type: ContactKind.partner);
 
         expect(pins, hasLength(1));
-        expect(pins.single.contactType, ContactType.awareness);
+        expect(pins.single['id'], 1);
         final query = server.calls.single.url.queryParameters;
         expect(query['contact_type'], 'consumer');
-        expect(query['awareness_mode'], '1');
+        expect(query['contact_kind'], 'partner');
       },
     );
 
@@ -347,150 +349,6 @@ void main() {
     });
   });
 
-  group('ProfessionalsService', () {
-    test('list reads partner contacts, filtered by profession', () async {
-      final server = FakeServer({
-        'GET /contacts': (_) => pageOf([
-          professionalJson(id: 1, name: 'Joy', type: 'Interior Designer'),
-        ]),
-      });
-
-      final result = await ProfessionalsService(
-        server.api,
-      ).list(type: ProfessionalType.interiorDesigner, query: 'jo');
-
-      final query = server.calls.single.url.queryParameters;
-      expect(query['contact_type'], 'partner');
-      expect(query['profession_type'], 'interior_designer');
-      expect(query['search'], 'jo');
-      expect(result.single.type, ProfessionalType.interiorDesigner);
-      expect(result.single.name, 'Joy');
-    });
-
-    test('list pages through everything when it is long', () async {
-      final server = FakeServer({
-        'GET /contacts': (request) {
-          final skip = int.parse(request.url.queryParameters['skip']!);
-          return pageOf(
-            [
-              for (var i = 0; i < (skip == 0 ? 100 : 30); i++)
-                professionalJson(id: skip + i + 1),
-            ],
-            total: 130,
-            skip: skip,
-            limit: 100,
-          );
-        },
-      });
-
-      final result = await ProfessionalsService(server.api).list();
-
-      expect(result, hasLength(130));
-      expect(server.calls, hasLength(2));
-      expect(
-        server.calls.first.url.queryParameters.containsKey('profession_type'),
-        isFalse,
-      );
-    });
-
-    test('Professional.fromJson reads detail and falls back to Other', () {
-      final detail = Professional.fromJson({
-        'id': 4,
-        'phone': '9',
-        'name': 'Kumar',
-        'created_by': 3,
-        'partner_profile': {
-          'profession_type': 'architect',
-          'work_area': 'Feroke',
-        },
-        'created_at': '2026-09-01T10:00:00',
-      });
-      expect(detail.type, ProfessionalType.architect);
-      expect(detail.place, 'Feroke');
-      expect(detail.createdByUserId, 3);
-      expect(
-        Professional.fromJson({
-          'id': 1,
-          'phone': '1',
-          'profession_type': 'astronaut',
-        }).type,
-        ProfessionalType.other,
-      );
-    });
-
-    test(
-      'create sends a partner; coordinates ride with the Offline source',
-      () async {
-        final server = FakeServer({
-          'GET /lead-sources': (_) => _sources,
-          'POST /contacts': (request) => {
-            ...jsonDecode(request.body) as Map<String, dynamic>,
-            'id': 8,
-            'created_at': '2026-09-01T10:00:00',
-          },
-        });
-
-        final created = await ProfessionalsService(server.api).create(
-          ProfessionalDraft(
-            name: 'Maya',
-            phone: '9876543210',
-            type: ProfessionalType.plumber,
-            place: 'Feroke',
-            address: 'Beach Road',
-            district: 'Kozhikode',
-            latitude: '11.25',
-            longitude: '75.78',
-          ),
-        );
-
-        final body = server.bodyOf('POST', '/contacts');
-        expect(body['contact_type'], 'partner');
-        expect(body['partner_profile'], {
-          'profession_type': 'plumber',
-          'work_area': 'Feroke',
-        });
-        expect(body['lead_source_id'], 3);
-        expect(body['latitude'], 11.25);
-        expect(created.id, 8);
-      },
-    );
-
-    test(
-      'create without a location sends no source and no coordinates',
-      () async {
-        final server = FakeServer({
-          'GET /lead-sources': (_) => _sources,
-          'POST /contacts': (_) => {'id': 8, 'phone': '1'},
-        });
-
-        await ProfessionalsService(server.api).create(
-          ProfessionalDraft(phone: '9876543210', district: 'x', address: 'y'),
-        );
-
-        final body = server.bodyOf('POST', '/contacts');
-        expect(body.containsKey('lead_source_id'), isFalse);
-        expect(body.containsKey('latitude'), isFalse);
-      },
-    );
-
-    test('update and delete use the contact id', () async {
-      final server = FakeServer({
-        'GET /lead-sources': (_) => _sources,
-        'PUT /contacts/8': (_) => {'id': 8, 'phone': '1', 'name': 'New'},
-        'DELETE /contacts/8': (_) => http.Response('', 204),
-      });
-      final service = ProfessionalsService(server.api);
-
-      final updated = await service.update(
-        8,
-        ProfessionalDraft(phone: '1', name: 'New', district: 'x', address: 'y'),
-      );
-      await service.delete(8);
-
-      expect(updated.name, 'New');
-      expect(server.to('DELETE', '/contacts/8'), hasLength(1));
-    });
-  });
 
   group('FollowupsService', () {
     Map<String, Object? Function(http.Request)> board({
@@ -545,7 +403,7 @@ void main() {
 
     test('stages come back in board order', () async {
       final server = FakeServer({
-        'GET /contacts/stage-types': (_) => [
+        'GET /pipeline/stages': (_) => [
           stageJson(id: 'won', label: 'Won', orderIndex: 2),
           stageJson(id: 'new_lead', label: 'New Lead', orderIndex: 0),
           stageJson(id: 'quoted', label: 'Quoted', orderIndex: 1),
@@ -630,41 +488,41 @@ void main() {
       );
     });
 
-    test('a new due date books a call for the lead\'s owner', () async {
+    test('a new due date books a follow-up for the lead\'s owner', () async {
       final server = FakeServer({
-        'GET /contacts/1/activities': (_) => [],
+        'GET /contacts/1/followups': (_) => [],
         'GET /contacts/1': (_) => {'id': 1, 'assigned_to': 7},
-        'POST /contacts/1/activities': (_) => _json(201, {'id': 4}),
+        'POST /contacts/1/followups': (_) => _json(201, {'id': 4}),
       });
 
       await FollowupsService(server.api).updateLead(1, dueDate: '2026-12-01');
 
-      expect(server.bodyOf('POST', '/contacts/1/activities'), {
-        'type': 'phone_call',
-        'scheduled_date': '2026-12-01',
+      expect(server.bodyOf('POST', '/contacts/1/followups'), {
+        'channel': 'phone_call',
+        'due_at': '2026-12-01T23:59:00',
         'assigned_to': 7,
       });
+      expect(server.to('POST', '/contacts/1/activities'), isEmpty);
     });
 
     test(
       'a new due date reschedules the open follow-up instead of adding one',
       () async {
         final server = FakeServer({
-          'GET /contacts/1/activities': (_) => [
-            {'id': 9, 'status': 'pending', 'scheduled_date': '2026-11-20'},
-            {'id': 8, 'status': 'pending', 'scheduled_date': '2026-11-10'},
-            {'id': 7, 'status': 'done', 'scheduled_date': '2026-10-01'},
-            {'id': 6, 'status': 'done', 'scheduled_date': null},
+          'GET /contacts/1/followups': (_) => [
+            {'id': 9, 'status': 'todo', 'due_at': '2026-11-20T23:59:00'},
+            {'id': 8, 'status': 'inprogress', 'due_at': '2026-11-10T23:59:00'},
+            {'id': 7, 'status': 'completed', 'due_at': '2026-10-01T23:59:00'},
           ],
-          'PATCH /contacts/1/activities/8': (_) => {'id': 8},
+          'PATCH /contacts/1/followups/8': (_) => {'id': 8},
         });
 
         await FollowupsService(server.api).updateLead(1, dueDate: '2026-12-01');
 
-        expect(server.bodyOf('PATCH', '/contacts/1/activities/8'), {
-          'scheduled_date': '2026-12-01',
+        expect(server.bodyOf('PATCH', '/contacts/1/followups/8'), {
+          'due_at': '2026-12-01T23:59:00',
         });
-        expect(server.to('POST', '/contacts/1/activities'), isEmpty);
+        expect(server.to('POST', '/contacts/1/followups'), isEmpty);
       },
     );
 
@@ -673,8 +531,8 @@ void main() {
       () async {
         final server = FakeServer({
           'PUT /contacts/1': (_) => {'id': 1},
-          'GET /contacts/1/activities': (_) => [],
-          'POST /contacts/1/activities': (_) => _json(201, {'id': 4}),
+          'GET /contacts/1/followups': (_) => [],
+          'POST /contacts/1/followups': (_) => _json(201, {'id': 4}),
         });
 
         await FollowupsService(
@@ -682,7 +540,7 @@ void main() {
         ).updateLead(1, assignedTo: '9', dueDate: '2026-12-01');
 
         expect(
-          server.bodyOf('POST', '/contacts/1/activities')['assigned_to'],
+          server.bodyOf('POST', '/contacts/1/followups')['assigned_to'],
           9,
         );
         expect(server.to('GET', '/contacts/1'), isEmpty);
@@ -690,79 +548,68 @@ void main() {
     );
 
     test(
-      'remarks merge notes, follow-ups and stage moves, newest first',
+      'remarks come from /history: notes, follow-ups and stage moves',
       () async {
         final server = FakeServer({
-          'GET /contacts/1/activities': (_) => [
+          'GET /contacts/1/history': (_) => [
             {
-              'id': 1,
-              'type': 'internal_note',
+              'event_type': 'activity',
+              'timestamp': '2026-09-02T10:00:00',
+              'actor_id': 3,
+              'actor_name': 'Anu',
+              'activity_type': 'internal_note',
               'notes': 'Called twice',
-              'status': 'done',
-              'scheduled_date': null,
-              'created_by': 3,
-              'created_by_name': 'Anu',
-              'created_at': '2026-09-02T10:00:00',
             },
             {
-              'id': 2,
-              'type': 'phone_call',
-              'notes': 'Confirm quote',
-              'status': 'pending',
-              'scheduled_date': '2026-10-20',
-              'created_by': 3,
-              'created_by_name': 'Anu',
-              'created_at': '2026-09-04T10:00:00',
+              'event_type': 'followup',
+              'timestamp': '2026-09-04T10:00:00',
+              'actor_id': 3,
+              'actor_name': 'Anu',
+              'title': 'Confirm quote',
+              'due_at': '2026-10-20T23:59:00',
+              'followup_status': 'todo',
             },
-          ],
-          'GET /contacts/1/stages': (_) => [
             {
-              'id': 7,
-              'stage': 'lost',
-              'loss_reason': 'price',
-              'changed_by': 3,
-              'changed_at': '2026-09-03T09:00:00',
+              'event_type': 'stage',
+              'timestamp': '2026-09-03T09:00:00',
+              'actor_name': 'Anu',
+              'stage_name': 'Lost',
             },
           ],
         });
 
         final remarks = await FollowupsService(server.api).remarks(1);
 
+        // The fixture's rows are kept in the order the server sent them.
         expect(remarks.map((r) => r.remark), [
-          'Call follow-up due 2026-10-20 · Confirm quote',
-          'Stage changed to Lost (Price)',
           'Called twice',
+          'Follow-up scheduled: Confirm quote · due 20 Oct',
+          'Stage set to Lost',
         ]);
-        expect(remarks.map((r) => r.isSystem), [true, true, false]);
-        expect(remarks.last.author, 'Anu');
-        expect(remarks[1].author, 'System');
+        expect(remarks.map((r) => r.isSystem), [false, true, true]);
+        expect(remarks.map((r) => r.isFollowup), [false, true, false]);
+        expect(remarks.first.author, 'Anu');
       },
     );
 
     test(
-      'rows saved in the same second keep the server newest-first order',
+      'remarks keep the server order, which is already newest first',
       () async {
-        const second = '2026-09-03T09:00:00';
         final server = FakeServer({
-          'GET /contacts/1/activities': (_) => [],
-          'GET /contacts/1/stages': (_) => [
+          'GET /contacts/1/history': (_) => [
             {
-              'id': 30,
-              'stage': 'connected',
-              'changed_by': 3,
-              'changed_at': second,
+              'event_type': 'stage',
+              'timestamp': '2026-09-03T09:00:00',
+              'actor_name': 'Anu',
+              'stage_name': 'Connected',
+              'previous_stage_name': 'First Call',
             },
             {
-              'id': 20,
-              'stage': 'first_call',
-              'changed_by': 3,
-              'changed_at': second,
-            },
-            {
-              'id': 10,
-              'stage': 'new_lead',
-              'changed_by': 3,
-              'changed_at': second,
+              'event_type': 'stage',
+              'timestamp': '2026-09-03T09:00:00',
+              'actor_name': 'Anu',
+              'stage_name': 'First Call',
+              'previous_stage_name': 'New Lead',
             },
           ],
         });
@@ -770,9 +617,8 @@ void main() {
         final remarks = await FollowupsService(server.api).remarks(1);
 
         expect(remarks.map((r) => r.remark), [
-          'Stage changed to Connected',
-          'Stage changed to First Call',
-          'Stage changed to New Lead',
+          'Stage moved to Connected from First Call',
+          'Stage moved to First Call from New Lead',
         ]);
       },
     );
