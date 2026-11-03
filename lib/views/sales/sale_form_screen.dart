@@ -47,6 +47,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
+  late final TextEditingController _productCtrl;
   late final TextEditingController _addressCtrl;
 
   bool get _isEditing => widget.existing != null;
@@ -71,6 +72,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
     _nameCtrl = TextEditingController(text: _draft.name);
     _phoneCtrl = TextEditingController(text: _draft.phone ?? '');
+    _productCtrl = TextEditingController(text: _draft.purchasedProduct ?? '');
     _addressCtrl = TextEditingController(text: _draft.address ?? '');
   }
 
@@ -94,6 +96,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _productCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
   }
@@ -162,19 +165,12 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
             // Product purchased — dropdown from past sales
             _Field(
               label: 'Product purchased',
-              child: DropdownButtonFormField<String>(
-                initialValue: suggestions.contains(_draft.purchasedProduct)
-                    ? _draft.purchasedProduct
-                    : null,
-                hint: const Text('Select product'),
-                isExpanded: true,
-                decoration: const InputDecoration(),
-                items: suggestions
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                    .toList(),
-                onChanged: _isLoadingProducts
-                    ? null
-                    : (v) => setState(() => _draft.purchasedProduct = v),
+              child: _ProductField(
+                controller: _productCtrl,
+                suggestions: suggestions,
+                enabled: !_isLoadingProducts,
+                onChanged: (value) => _draft.purchasedProduct =
+                    value.trim().isEmpty ? null : value.trim(),
               ),
             ),
 
@@ -258,6 +254,47 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 }
 
 // ── Shared label + field wrapper ───────────────────────────────────────────
+
+class _ProductField extends StatelessWidget {
+  const _ProductField({
+    required this.controller,
+    required this.suggestions,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final List<String> suggestions;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: controller.text),
+      optionsBuilder: (textEditingValue) {
+        final query = textEditingValue.text.toLowerCase();
+        if (query.isEmpty) return suggestions;
+        return suggestions.where((s) => s.toLowerCase().contains(query));
+      },
+      fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
+        return TextFormField(
+          controller: ctrl,
+          focusNode: focus,
+          enabled: enabled,
+          decoration: const InputDecoration(
+            hintText: 'Tank model or product name',
+          ),
+          onChanged: onChanged,
+        );
+      },
+      onSelected: (value) {
+        controller.text = value;
+        onChanged(value);
+      },
+    );
+  }
+}
 
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.child});
